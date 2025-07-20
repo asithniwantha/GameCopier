@@ -15,11 +15,15 @@
             <!-- Converters -->
             <converters:ProgressConverter x:Key="ProgressConverter"/>
             <converters:StatusToProgressVisibilityConverter x:Key="StatusToProgressVisibilityConverter"/>
+            <converters:PendingStatusToVisibilityConverter x:Key="PendingStatusToVisibilityConverter"/>
             <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
             <converters:DeploymentIconConverter x:Key="DeploymentIconConverter"/>
             <converters:DeploymentButtonTextConverter x:Key="DeploymentButtonTextConverter"/>
             <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <converters:DateTimeToStringConverter x:Key="DateTimeToStringConverter"/>
+            <converters:PausedTimeConverter x:Key="PausedTimeConverter"/>
             
             <!-- Theme Resources -->
             <ResourceDictionary.ThemeDictionaries>

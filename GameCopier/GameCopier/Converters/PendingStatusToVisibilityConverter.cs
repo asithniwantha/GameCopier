@@ -1,27 +1,24 @@
-using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+using System;
+using GameCopier.Models;
 
 namespace GameCopier.Converters
 {
-    public class BoolToVisibilityConverter : IValueConverter
+    public class PendingStatusToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            if (value is bool boolValue)
+            if (value is DeploymentJobStatus status)
             {
-                return boolValue ? Visibility.Visible : Visibility.Collapsed;
+                return status == DeploymentJobStatus.Pending ? Visibility.Visible : Visibility.Collapsed;
             }
             return Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
         {
-            if (value is Visibility visibility)
-            {
-                return visibility == Visibility.Visible;
-            }
-            return false;
+            throw new NotImplementedException();
         }
     }
 }

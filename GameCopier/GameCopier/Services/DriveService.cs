@@ -320,52 +320,22 @@ namespace GameCopier.Services
             {
                 System.Diagnostics.Debug.WriteLine($"🔍 === ENHANCED DEVICE DETECTION for {driveLetter} ===");
                 
-                // PRIORITY 1: Use volume label as the primary identifier since it's drive-specific
+                // PRIORITY 1: Get the SPECIFIC device name for THIS drive letter FIRST
                 try
                 {
-                    var query = $"SELECT VolumeLabel, FileSystem FROM Win32_LogicalDisk WHERE DeviceID = '{driveLetter}:'";
-                    using var searcher = new ManagementObjectSearcher(query);
-                    
-                    foreach (ManagementObject disk in searcher.Get())
+                    var specificDeviceName = GetSpecificDeviceNameForDrive(driveLetter);
+                    if (!string.IsNullOrEmpty(specificDeviceName))
                     {
-                        var volumeLabel = disk["VolumeLabel"]?.ToString();
-                        var fileSystem = disk["FileSystem"]?.ToString();
-                        
-                        System.Diagnostics.Debug.WriteLine($"🔍 Volume Label for {driveLetter}: '{volumeLabel}', FileSystem: '{fileSystem}'");
-                        
-                        if (!string.IsNullOrEmpty(volumeLabel))
-                        {
-                            System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using volume label as primary identifier: '{volumeLabel}'");
-                            return volumeLabel;
-                        }
+                        System.Diagnostics.Debug.WriteLine($"🔍 ✅ Found specific device name for {driveLetter}: '{specificDeviceName}'");
+                        return specificDeviceName;
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"❌ Volume label query failed: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"❌ Specific device name query failed: {ex.Message}");
                 }
                 
-                // PRIORITY 2: Try friendly name mapping (only if we can properly map to this specific drive)
-                try
-                {
-                    var specificFriendlyName = GetSpecificDeviceFriendlyName(driveLetter);
-                    if (!string.IsNullOrEmpty(specificFriendlyName))
-                    {
-                        System.Diagnostics.Debug.WriteLine($"🔍 ✅ Found specific friendly name for {driveLetter}: '{specificFriendlyName}'");
-                        var cleanedFriendlyName = CleanAndEnhanceDeviceName(specificFriendlyName);
-                        if (!string.IsNullOrEmpty(cleanedFriendlyName) && cleanedFriendlyName != "USB Storage")
-                        {
-                            System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using cleaned specific friendly name: '{cleanedFriendlyName}'");
-                            return cleanedFriendlyName;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"❌ Specific friendly name query failed: {ex.Message}");
-                }
-                
-                // PRIORITY 3: Enhanced Physical Disk Info (but only if we can map it to this drive)
+                // PRIORITY 2: Try to get enhanced physical disk info
                 try
                 {
                     var physicalInfo = GetEnhancedPhysicalDiskInfo(driveLetter);
@@ -380,25 +350,55 @@ namespace GameCopier.Services
                     System.Diagnostics.Debug.WriteLine($"❌ Enhanced Physical Disk query failed: {ex.Message}");
                 }
                 
-                // Final fallback
-                System.Diagnostics.Debug.WriteLine($"🔍 All methods failed, using final fallback for {driveLetter}");
-                return "USB Storage Device";
+                // PRIORITY 3: Use volume label as fallback (but this will be handled in EnhancedDescription)
+                try
+                {
+                    var query = $"SELECT VolumeLabel, FileSystem FROM Win32_LogicalDisk WHERE DeviceID = '{driveLetter}:'";
+                    using var searcher = new ManagementObjectSearcher(query);
+                    
+                    foreach (ManagementObject disk in searcher.Get())
+                    {
+                        var volumeLabel = disk["VolumeLabel"]?.ToString();
+                        var fileSystem = disk["FileSystem"]?.ToString();
+                        
+                        System.Diagnostics.Debug.WriteLine($"🔍 Volume Label for {driveLetter}: '{volumeLabel}', FileSystem: '{fileSystem}'");
+                        
+                        // Only return volume label if it's meaningful and custom
+                        if (!string.IsNullOrEmpty(volumeLabel) && 
+                            volumeLabel.Trim().Length > 0 &&
+                            !volumeLabel.ToUpper().Contains("NEW VOLUME") &&
+                            volumeLabel != "USB Drive")
+                        {
+                            System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using meaningful volume label: '{volumeLabel}'");
+                            return volumeLabel.Trim();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ Volume label query failed: {ex.Message}");
+                }
+                
+                // Final fallback - return empty to let EnhancedDescription handle the volume label display
+                System.Diagnostics.Debug.WriteLine($"🔍 No specific device info found for {driveLetter}, letting EnhancedDescription handle volume label");
+                return "";
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"❌ Critical error in GetDeviceDescription for {driveLetter}: {ex.Message}");
-                return "USB Storage Device";
+                return "";
             }
         }
 
-        private string GetSpecificDeviceFriendlyName(string driveLetter)
+        private string GetSpecificDeviceNameForDrive(string driveLetter)
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"🔍 === GETTING SPECIFIC FRIENDLY NAME for {driveLetter} ===");
+                System.Diagnostics.Debug.WriteLine($"🔍 === GETTING SPECIFIC DEVICE NAME for {driveLetter} ===");
                 
-                // Try to map the drive letter to a specific physical disk through partitions
+                // Step 1: Map drive letter to partition
                 string? diskIndex = null;
+                string? partitionIndex = null;
                 
                 try
                 {
@@ -412,12 +412,13 @@ namespace GameCopier.Services
                         
                         if (!string.IsNullOrEmpty(antecedent))
                         {
-                            // Extract disk index from antecedent
-                            var diskIndexMatch = System.Text.RegularExpressions.Regex.Match(antecedent, @"Disk #(\d+)");
-                            if (diskIndexMatch.Success)
+                            // Extract disk and partition index from antecedent
+                            var diskMatch = System.Text.RegularExpressions.Regex.Match(antecedent, @"Disk #(\d+).*Partition #(\d+)");
+                            if (diskMatch.Success)
                             {
-                                diskIndex = diskIndexMatch.Groups[1].Value;
-                                System.Diagnostics.Debug.WriteLine($"🔍 Found disk index for {driveLetter}: {diskIndex}");
+                                diskIndex = diskMatch.Groups[1].Value;
+                                partitionIndex = diskMatch.Groups[2].Value;
+                                System.Diagnostics.Debug.WriteLine($"🔍 Found mapping for {driveLetter}: Disk #{diskIndex}, Partition #{partitionIndex}");
                                 break;
                             }
                         }
@@ -428,25 +429,50 @@ namespace GameCopier.Services
                     System.Diagnostics.Debug.WriteLine($"❌ Partition mapping failed for {driveLetter}: {ex.Message}");
                 }
                 
-                // If we found a specific disk index, get its friendly name
+                // Step 2: If we found a specific disk, get its device information
                 if (!string.IsNullOrEmpty(diskIndex))
                 {
                     try
                     {
-                        var diskQuery = $"SELECT Model, PNPDeviceID FROM Win32_DiskDrive WHERE Index = {diskIndex}";
+                        var diskQuery = $"SELECT Model, Caption, Manufacturer, SerialNumber, Size FROM Win32_DiskDrive WHERE Index = {diskIndex}";
                         using var diskSearcher = new ManagementObjectSearcher(diskQuery);
                         
                         foreach (ManagementObject diskDrive in diskSearcher.Get())
                         {
-                            var model = diskDrive["Model"]?.ToString();
-                            var pnpDeviceId = diskDrive["PNPDeviceID"]?.ToString();
+                            var model = diskDrive["Model"]?.ToString()?.Trim();
+                            var caption = diskDrive["Caption"]?.ToString()?.Trim();
+                            var manufacturer = diskDrive["Manufacturer"]?.ToString()?.Trim();
+                            var serialNumber = diskDrive["SerialNumber"]?.ToString()?.Trim();
+                            var size = diskDrive["Size"]?.ToString();
                             
-                            System.Diagnostics.Debug.WriteLine($"🔍 Disk {diskIndex} - Model: '{model}', PNPDeviceID: '{pnpDeviceId}'");
+                            System.Diagnostics.Debug.WriteLine($"🔍 Disk {diskIndex} details:");
+                            System.Diagnostics.Debug.WriteLine($"  Model: '{model}'");
+                            System.Diagnostics.Debug.WriteLine($"  Caption: '{caption}'");
+                            System.Diagnostics.Debug.WriteLine($"  Manufacturer: '{manufacturer}'");
+                            System.Diagnostics.Debug.WriteLine($"  SerialNumber: '{serialNumber}'");
+                            System.Diagnostics.Debug.WriteLine($"  Size: '{size}'");
                             
-                            if (!string.IsNullOrEmpty(model))
+                            // Use the most specific identifier available
+                            if (!string.IsNullOrEmpty(model) && model != "Unknown")
                             {
-                                System.Diagnostics.Debug.WriteLine($"🔍 ✅ Found specific model for {driveLetter}: '{model}'");
-                                return model;
+                                // Add partition info to make it unique if multiple partitions exist
+                                var result = model;
+                                if (!string.IsNullOrEmpty(partitionIndex) && partitionIndex != "0")
+                                {
+                                    result += $" (Partition {partitionIndex})";
+                                }
+                                System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using model with partition info: '{result}'");
+                                return result;
+                            }
+                            else if (!string.IsNullOrEmpty(caption) && caption != "Unknown")
+                            {
+                                var result = caption;
+                                if (!string.IsNullOrEmpty(partitionIndex) && partitionIndex != "0")
+                                {
+                                    result += $" (Partition {partitionIndex})";
+                                }
+                                System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using caption with partition info: '{result}'");
+                                return result;
                             }
                         }
                     }
@@ -456,12 +482,12 @@ namespace GameCopier.Services
                     }
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"🔍 No specific friendly name found for {driveLetter}");
+                System.Diagnostics.Debug.WriteLine($"🔍 No specific device name found for {driveLetter}");
                 return "";
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"❌ Error getting specific friendly name for {driveLetter}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ Error getting specific device name for {driveLetter}: {ex.Message}");
                 return "";
             }
         }
@@ -595,33 +621,22 @@ namespace GameCopier.Services
             try
             {
                 var description = drive.DeviceDescription;
-                System.Diagnostics.Debug.WriteLine($"🔍 === ENHANCED BRAND/MODEL EXTRACTION for {drive.DriveLetter} ===");
+                System.Diagnostics.Debug.WriteLine($"🔍 === BRAND/MODEL EXTRACTION for {drive.DriveLetter} ===");
                 System.Diagnostics.Debug.WriteLine($"🔍 Drive Label: '{drive.Label}'");
                 System.Diagnostics.Debug.WriteLine($"🔍 Device Description: '{description}'");
                 
-                // STRATEGY 1: If device description is a volume label, use label-based logic
-                if (!string.IsNullOrEmpty(description) && description == drive.Label)
-                {
-                    System.Diagnostics.Debug.WriteLine($"🔍 Device description matches volume label - using label-based strategy");
-                    
-                    // For special cases like "PhoenixLiteOS" which might be a SanDisk drive
-                    var labelUpper = drive.Label.ToUpper();
-                    if (labelUpper.Contains("PHOENIX") || labelUpper.Contains("LITE"))
-                    {
-                        drive.BrandName = "SanDisk";
-                        drive.Model = "Custom";
-                        System.Diagnostics.Debug.WriteLine($"🔍 ✅ Detected SanDisk drive from 'PhoenixLiteOS' pattern");
-                    }
-                    else if (drive.Label.Length > 3 && !drive.Label.ToUpper().Contains("VOLUME"))
-                    {
-                        // Use meaningful volume labels as they are
-                        drive.BrandName = "";  // No brand extraction for custom labels
-                        drive.Model = "";      // No model extraction for custom labels
-                        System.Diagnostics.Debug.WriteLine($"🔍 ✅ Using volume label as-is: '{drive.Label}'");
-                    }
-                }
-                // STRATEGY 2: If device description contains device info, extract brand/model
-                else if (!string.IsNullOrEmpty(description) && description != "USB Storage Device")
+                // Clear any previous values
+                drive.BrandName = "";
+                drive.Model = "";
+                
+                // Only extract brand/model if we have a meaningful device description that's not a volume label
+                if (!string.IsNullOrEmpty(description) && 
+                    description != drive.Label &&
+                    !description.StartsWith("USB Drive ") &&
+                    description != "USB Storage Device" &&
+                    description != "USB Device" &&
+                    description != "Storage Device" &&
+                    description.Length > 5)
                 {
                     var cleanedDescription = description;
                     
@@ -632,19 +647,21 @@ namespace GameCopier.Services
                     }
                     cleanedDescription = cleanedDescription.Replace(" USB Device", "").Replace(" USB DEVICE", "").Trim();
                     
-                    System.Diagnostics.Debug.WriteLine($"🔍 Pre-cleaned description (preserving version): '{cleanedDescription}'");
+                    System.Diagnostics.Debug.WriteLine($"🔍 Cleaned description for brand extraction: '{cleanedDescription}'");
                     
                     var brands = new[] { 
                         "SanDisk", "Kingston", "Samsung", "Lexar", "PNY", 
                         "Corsair", "Transcend", "Verbatim", "Toshiba", "Sony", "ADATA",
-                        "Seagate", "Western Digital", "WD", "Crucial", "Patriot"
+                        "Seagate", "Western Digital", "WD", "Crucial", "Patriot", "Micron"
                     };
                     
+                    bool brandFound = false;
                     foreach (var brand in brands)
                     {
                         if (cleanedDescription.ToUpper().Contains(brand.ToUpper()))
                         {
                             drive.BrandName = brand;
+                            brandFound = true;
                             System.Diagnostics.Debug.WriteLine($"🔍 ✅ Found brand '{brand}' in device description");
                             
                             var brandIndex = cleanedDescription.ToUpper().IndexOf(brand.ToUpper());
@@ -653,7 +670,7 @@ namespace GameCopier.Services
                                 var afterBrand = cleanedDescription.Substring(brandIndex + brand.Length).Trim();
                                 System.Diagnostics.Debug.WriteLine($"🔍 Text after brand: '{afterBrand}'");
                                 
-                                // Clean up but preserve version numbers
+                                // Clean up but preserve version numbers and model info
                                 afterBrand = afterBrand
                                     .Replace("USB Device", "")
                                     .Replace("USB DEVICE", "")
@@ -671,6 +688,21 @@ namespace GameCopier.Services
                             break;
                         }
                     }
+                    
+                    // If no brand found but we have a good device description, treat the whole thing as a model
+                    if (!brandFound && cleanedDescription.Length > 3)
+                    {
+                        // Check if it looks like a model name (contains numbers, version info, etc.)
+                        if (System.Text.RegularExpressions.Regex.IsMatch(cleanedDescription, @"[\d\.]+|Ultra|Pro|Plus|Max|Extreme"))
+                        {
+                            drive.Model = cleanedDescription;
+                            System.Diagnostics.Debug.WriteLine($"🔍 ✅ Set whole description as model: '{cleanedDescription}'");
+                        }
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"🔍 Skipping brand/model extraction - no meaningful device description");
                 }
                 
                 System.Diagnostics.Debug.WriteLine($"🔍 === FINAL EXTRACTION RESULT for {drive.DriveLetter} ===");

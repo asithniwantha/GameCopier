@@ -1,6 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using GameCopier.ViewModels;
+using GameCopier.Models;
 using System;
 using System.Threading.Tasks;
 
@@ -30,6 +32,38 @@ namespace GameCopier
             // After the settings dialog closes, refresh the drives to apply any changes
             System.Diagnostics.Debug.WriteLine("?? Settings dialog closed, refreshing drives...");
             await ViewModel.RefreshDrivesAfterSettingsChange();
+        }
+
+        private void GameItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is FrameworkElement element && element.DataContext is Game game)
+                {
+                    System.Diagnostics.Debug.WriteLine($"?? Double-tapped game: {game.Name} at {game.FolderPath}");
+                    ViewModel.OpenGameFolderCommand.Execute(game);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? Error handling game double-tap: {ex.Message}");
+            }
+        }
+
+        private void SoftwareItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is FrameworkElement element && element.DataContext is Software software)
+                {
+                    System.Diagnostics.Debug.WriteLine($"?? Double-tapped software: {software.Name} at {software.FolderPath}");
+                    ViewModel.OpenSoftwareFolderCommand.Execute(software);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? Error handling software double-tap: {ex.Message}");
+            }
         }
     }
 }

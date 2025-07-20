@@ -38,6 +38,11 @@ namespace GameCopier.Services
             JobUpdated?.Invoke(this, job);
         }
 
+        public void QueueJob(Game game, Drive targetDrive)
+        {
+            QueueDeployment(game, targetDrive);
+        }
+
         public void QueueMultipleDeployments(IEnumerable<Game> games, IEnumerable<Drive> targetDrives)
         {
             var gamesList = games.ToList();

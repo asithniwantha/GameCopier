@@ -175,115 +175,90 @@ namespace GameCopier.Models
         {
             get
             {
-                System.Diagnostics.Debug.WriteLine($"?? EnhancedDescription - Brand: '{BrandName}', Model: '{Model}', FileSystem: '{FileSystem}', DeviceDescription: '{DeviceDescription}'");
-                
-                var parts = new List<string>();
-
-                // Start with brand name if available and meaningful
-                if (!string.IsNullOrEmpty(BrandName) && 
-                    BrandName != "USB" && 
-                    BrandName != "Storage" && 
-                    BrandName != "Device" && 
-                    BrandName.Length > 2)
+                try
                 {
-                    parts.Add(BrandName);
-                    System.Diagnostics.Debug.WriteLine($"?? Added brand: '{BrandName}'");
-                }
-
-                // Add model if available and different from brand
-                if (!string.IsNullOrEmpty(Model) && 
-                    Model != BrandName && 
-                    Model.Length > 2 &&
-                    Model != "USB" &&
-                    Model != "Storage" &&
-                    Model != "Device")
-                {
-                    // Clean the model name further
-                    var cleanModel = Model
-                        .Replace("USB Device", "")
-                        .Replace("USB", "")
-                        .Replace("Device", "")
-                        .Replace("Storage", "")
-                        .Trim();
+                    System.Diagnostics.Debug.WriteLine($"?? EnhancedDescription for {DriveLetter} - DeviceDescription: '{DeviceDescription}', Label: '{Label}', Brand: '{BrandName}', Model: '{Model}', FileSystem: '{FileSystem}'");
                     
-                    if (!string.IsNullOrEmpty(cleanModel) && cleanModel.Length > 2)
+                    var result = "";
+                    
+                    // Strategy 1: If we have a meaningful, unique volume label, prefer it over device info
+                    if (!string.IsNullOrEmpty(Label) && 
+                        Label.Length > 0 && 
+                        Label != "USB Drive" &&
+                        !Label.ToUpper().Contains("NEW VOLUME"))
                     {
-                        parts.Add(cleanModel);
-                        System.Diagnostics.Debug.WriteLine($"?? Added model: '{cleanModel}'");
+                        result = Label;
+                        System.Diagnostics.Debug.WriteLine($"?? Using meaningful volume label: '{result}'");
                     }
-                }
-
-                // Always add filesystem if available - show it prominently at the end
-                var result = "";
-                
-                if (parts.Count > 0)
-                {
-                    // Join brand and model
-                    result = string.Join(" ", parts);
-                    System.Diagnostics.Debug.WriteLine($"?? Combined brand/model: '{result}'");
-                }
-                else
-                {
-                    // Fallback to cleaned device description
-                    if (!string.IsNullOrEmpty(DeviceDescription))
+                    // Strategy 2: Handle "New Volume" case with drive letter for uniqueness
+                    else if (!string.IsNullOrEmpty(Label) && Label.ToUpper().Contains("NEW VOLUME"))
                     {
-                        var cleaned = DeviceDescription;
-                        
-                        // Only clean if it contains redundant terms
-                        if (cleaned.Contains("USB Storage Device") || 
-                            cleaned.Contains("USB Device") || 
-                            cleaned.Contains("Storage Device") ||
-                            cleaned.Contains("Standard disk drives")) 
-                        {
-                            cleaned = cleaned
-                                .Replace("USB Storage Device", "")
-                                .Replace("USB Device", "")
-                                .Replace("Storage Device", "")
-                                .Replace("(Standard disk drives)","")
-                                .Trim();
-                        }
-                        
-                        // If after cleaning we still have something meaningful, use it
-                        if (!string.IsNullOrEmpty(cleaned) && cleaned.Length > 3)
-                        {
-                            result = cleaned;
-                            System.Diagnostics.Debug.WriteLine($"?? Using cleaned device description: '{result}'");
-                        }
-                        // If original device description is meaningful, keep it
-                        else if (DeviceDescription != "USB Storage Device" && 
-                                DeviceDescription != "USB Device" && 
-                                DeviceDescription != "Storage Device" &&
-                                DeviceDescription.Length > 5)
-                        {
-                            result = DeviceDescription;
-                            System.Diagnostics.Debug.WriteLine($"?? Using original device description: '{result}'");
-                        }
+                        result = $"New Volume ({DriveLetter})";
+                        System.Diagnostics.Debug.WriteLine($"?? Using generic volume label with drive letter: '{result}'");
+                    }
+                    // Strategy 3: If we have brand and model information AND no meaningful volume label
+                    else if (!string.IsNullOrEmpty(BrandName) && !string.IsNullOrEmpty(Model))
+                    {
+                        result = $"{BrandName} {Model}";
+                        System.Diagnostics.Debug.WriteLine($"?? Using brand and model: '{result}'");
+                    }
+                    // Strategy 4: If we have just a brand name with meaningful device description
+                    else if (!string.IsNullOrEmpty(BrandName) && 
+                             !string.IsNullOrEmpty(DeviceDescription) && 
+                             DeviceDescription != "USB Storage Device" && 
+                             DeviceDescription != "USB Device" && 
+                             DeviceDescription != "Storage Device" &&
+                             !DeviceDescription.StartsWith("USB Drive "))
+                    {
+                        result = DeviceDescription;
+                        System.Diagnostics.Debug.WriteLine($"?? Using device description with brand: '{result}'");
+                    }
+                    // Strategy 5: If we have a meaningful device description that's not just a volume label
+                    else if (!string.IsNullOrEmpty(DeviceDescription) && 
+                             DeviceDescription != "USB Storage Device" && 
+                             DeviceDescription != "USB Device" && 
+                             DeviceDescription != "Storage Device" &&
+                             !DeviceDescription.StartsWith("USB Drive ") &&
+                             DeviceDescription.Length > 3)
+                    {
+                        result = DeviceDescription;
+                        System.Diagnostics.Debug.WriteLine($"?? Using meaningful device description: '{result}'");
+                    }
+                    // Strategy 6: Use empty volume label as a last resort
+                    else if (!string.IsNullOrEmpty(Label))
+                    {
+                        result = Label;
+                        System.Diagnostics.Debug.WriteLine($"?? Using any volume label as fallback: '{result}'");
+                    }
+                    // Strategy 7: Final fallback with drive letter for uniqueness
+                    else
+                    {
+                        result = $"USB Drive ({DriveLetter})";
+                        System.Diagnostics.Debug.WriteLine($"?? Using final fallback with drive letter: '{result}'");
                     }
                     
-                    // Final fallback if no meaningful device info
-                    if (string.IsNullOrEmpty(result))
+                    // Always append filesystem if available for technical information
+                    if (!string.IsNullOrEmpty(FileSystem) && FileSystem != "Unknown")
                     {
-                        result = "USB Storage";
-                        System.Diagnostics.Debug.WriteLine($"?? Using fallback: '{result}'");
+                        result += $" ({FileSystem})";
+                        System.Diagnostics.Debug.WriteLine($"?? Added filesystem: '{FileSystem}'");
                     }
+                    
+                    // Final cleanup
+                    result = result.Trim();
+                    while (result.Contains("  "))
+                    {
+                        result = result.Replace("  ", " ");
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"?? ? Final EnhancedDescription for {DriveLetter}: '{result}'");
+                    return result;
                 }
-
-                // Always append filesystem if available - this provides the technical detail
-                if (!string.IsNullOrEmpty(FileSystem) && FileSystem != "Unknown")
+                catch (Exception ex)
                 {
-                    result += $" ({FileSystem})";
-                    System.Diagnostics.Debug.WriteLine($"?? Added filesystem: '({FileSystem})'");
+                    System.Diagnostics.Debug.WriteLine($"? Error in EnhancedDescription for {DriveLetter}: {ex.Message}");
+                    return $"USB Drive ({DriveLetter}) ({FileSystem ?? "Unknown"})";
                 }
-
-                // Final cleanup
-                while (result.Contains("  "))
-                {
-                    result = result.Replace("  ", " ");
-                }
-                
-                var finalResult = result.Trim();
-                System.Diagnostics.Debug.WriteLine($"?? EnhancedDescription final result: '{finalResult}'");
-                return finalResult;
             }
         }
 

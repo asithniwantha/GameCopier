@@ -35,6 +35,10 @@ namespace GameCopier
         /// </summary>
         public App()
         {
+            // Required for PublishSingleFile with Windows App SDK
+            // Set the base directory for the Windows App Runtime before initialization
+            Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", AppContext.BaseDirectory);
+            
             InitializeComponent();
         }
 

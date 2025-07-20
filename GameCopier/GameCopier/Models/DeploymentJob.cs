@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace GameCopier.Models
 {
@@ -8,6 +9,7 @@ namespace GameCopier.Models
     {
         Pending,
         InProgress,
+        Paused,
         Completed,
         Failed,
         Cancelled
@@ -24,6 +26,8 @@ namespace GameCopier.Models
         private DateTime _createdAt = DateTime.Now;
         private DateTime? _startedAt;
         private DateTime? _completedAt;
+        private DateTime? _pausedAt;
+        private CancellationTokenSource? _cancellationTokenSource;
 
         public string Id
         {
@@ -65,6 +69,9 @@ namespace GameCopier.Models
                 _status = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(StatusDisplay));
+                OnPropertyChanged(nameof(CanPause));
+                OnPropertyChanged(nameof(CanCancel));
+                OnPropertyChanged(nameof(CanResume));
             }
         }
 
@@ -120,22 +127,110 @@ namespace GameCopier.Models
             }
         }
 
+        public DateTime? PausedAt
+        {
+            get => _pausedAt;
+            set
+            {
+                _pausedAt = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Individual cancellation token source for this job
+        /// </summary>
+        public CancellationTokenSource? CancellationTokenSource
+        {
+            get => _cancellationTokenSource;
+            set
+            {
+                _cancellationTokenSource = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Cancellation token for this specific job
+        /// </summary>
+        public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
+
         public string DisplayName => $"{Game.Name} ? {TargetDrive.Name}";
+        
         public string StatusDisplay => Status switch
         {
             DeploymentJobStatus.Pending => "Pending",
             DeploymentJobStatus.InProgress => $"Copying... {Progress:F0}%",
+            DeploymentJobStatus.Paused => $"?? Paused at {Progress:F0}%",
             DeploymentJobStatus.Completed => "? Completed",
             DeploymentJobStatus.Failed => $"? Failed: {ErrorMessage}",
-            DeploymentJobStatus.Cancelled => "Cancelled",
+            DeploymentJobStatus.Cancelled => "?? Cancelled",
             _ => "Unknown"
         };
+
+        // UI Control Properties
+        public bool CanPause => Status == DeploymentJobStatus.InProgress;
+        public bool CanCancel => Status == DeploymentJobStatus.Pending || Status == DeploymentJobStatus.InProgress || Status == DeploymentJobStatus.Paused;
+        public bool CanResume => Status == DeploymentJobStatus.Paused;
+
+        /// <summary>
+        /// Pause this individual job
+        /// </summary>
+        public void Pause()
+        {
+            if (Status == DeploymentJobStatus.InProgress)
+            {
+                Status = DeploymentJobStatus.Paused;
+                PausedAt = DateTime.Now;
+                System.Diagnostics.Debug.WriteLine($"?? Job paused: {DisplayName}");
+            }
+        }
+
+        /// <summary>
+        /// Resume this individual job
+        /// </summary>
+        public void Resume()
+        {
+            if (Status == DeploymentJobStatus.Paused)
+            {
+                Status = DeploymentJobStatus.InProgress;
+                PausedAt = null;
+                System.Diagnostics.Debug.WriteLine($"?? Job resumed: {DisplayName}");
+            }
+        }
+
+        /// <summary>
+        /// Cancel this individual job
+        /// </summary>
+        public void Cancel()
+        {
+            if (CanCancel)
+            {
+                _cancellationTokenSource?.Cancel();
+                Status = DeploymentJobStatus.Cancelled;
+                System.Diagnostics.Debug.WriteLine($"?? Job cancelled: {DisplayName}");
+            }
+        }
+
+        /// <summary>
+        /// Initialize cancellation token for this job
+        /// </summary>
+        public void InitializeCancellation()
+        {
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = new CancellationTokenSource();
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        public void Dispose()
+        {
+            _cancellationTokenSource?.Dispose();
         }
     }
 }
