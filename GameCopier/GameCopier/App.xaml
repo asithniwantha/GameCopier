@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="GameCopier.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:GameCopier"
+    xmlns:converters="using:GameCopier.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- Other merged dictionaries here -->
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Converters -->
+            <converters:ProgressConverter x:Key="ProgressConverter"/>
+            <converters:StatusToProgressVisibilityConverter x:Key="StatusToProgressVisibilityConverter"/>
+            <converters:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+            <converters:DeploymentIconConverter x:Key="DeploymentIconConverter"/>
+            <converters:DeploymentButtonTextConverter x:Key="DeploymentButtonTextConverter"/>
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            
+            <!-- Theme Resources -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#4a9eff"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#4a9eff"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
