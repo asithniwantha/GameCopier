@@ -1,0 +1,1 @@
+// This file was created in error - the StringToVisibilityConverter already exists in BoolToVisibilityConverter.cs

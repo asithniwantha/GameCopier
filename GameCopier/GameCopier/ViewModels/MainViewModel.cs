@@ -26,6 +26,7 @@ namespace GameCopier.ViewModels
         private int _usbEventCount = 0;
 
         private string _searchText = string.Empty;
+        private string _softwareSearchText = string.Empty;
         private double _overallProgress = 0.0;
         private bool _isDeploymentRunning = false;
         private string _statusText = "Ready";
@@ -35,9 +36,28 @@ namespace GameCopier.ViewModels
             get => _searchText;
             set
             {
-                _searchText = value;
-                OnPropertyChanged();
-                FilterGames();
+                if (_searchText != value)
+                {
+                    _searchText = value;
+                    System.Diagnostics.Debug.WriteLine($"?? SearchText changed to: '{value}'");
+                    OnPropertyChanged();
+                    FilterGames();
+                }
+            }
+        }
+
+        public string SoftwareSearchText
+        {
+            get => _softwareSearchText;
+            set
+            {
+                if (_softwareSearchText != value)
+                {
+                    _softwareSearchText = value;
+                    System.Diagnostics.Debug.WriteLine($"?? SoftwareSearchText changed to: '{value}'");
+                    OnPropertyChanged();
+                    FilterSoftware();
+                }
             }
         }
 
@@ -74,16 +94,53 @@ namespace GameCopier.ViewModels
 
         public ObservableCollection<Game> Games { get; } = new();
         public ObservableCollection<Game> FilteredGames { get; } = new();
+        public ObservableCollection<Software> Software { get; } = new();
+        public ObservableCollection<Software> FilteredSoftware { get; } = new();
         public ObservableCollection<Drive> AvailableDrives { get; } = new();
         public ObservableCollection<DeploymentJob> DeploymentJobs { get; } = new();
 
+        public string GameSearchResultsText
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(SearchText))
+                    return "";
+                
+                var count = FilteredGames.Count;
+                var total = Games.Count;
+                var result = count == 1 ? $"Found 1 game out of {total}" : $"Found {count} games out of {total}";
+                System.Diagnostics.Debug.WriteLine($"?? GameSearchResultsText: '{result}'");
+                return result;
+            }
+        }
+
+        public string SoftwareSearchResultsText
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(SoftwareSearchText))
+                    return "";
+                
+                var count = FilteredSoftware.Count;
+                var total = Software.Count;
+                var result = count == 1 ? $"Found 1 software out of {total}" : $"Found {count} software out of {total}";
+                System.Diagnostics.Debug.WriteLine($"?? SoftwareSearchResultsText: '{result}'");
+                return result;
+            }
+        }
+
         public ICommand LoadGamesCommand { get; }
         public ICommand RefreshLibraryCommand { get; }
+        public ICommand LoadSoftwareCommand { get; }
+        public ICommand RefreshSoftwareLibraryCommand { get; }
         public ICommand LoadDrivesCommand { get; }
         public ICommand StartDeploymentCommand { get; }
         public ICommand CancelDeploymentCommand { get; }
         public ICommand ShowSettingsCommand { get; }
         public ICommand AddGameFolderCommand { get; }
+        public ICommand AddSoftwareFolderCommand { get; }
+        public ICommand ClearSearchCommand { get; }
+        public ICommand ClearSoftwareSearchCommand { get; }
 
         public event EventHandler? RequestSettingsDialog;
 
@@ -113,11 +170,16 @@ namespace GameCopier.ViewModels
 
             LoadGamesCommand = new RelayCommand(async () => await LoadGamesAsync());
             RefreshLibraryCommand = new RelayCommand(async () => await RefreshLibraryAsync());
+            LoadSoftwareCommand = new RelayCommand(async () => await LoadSoftwareAsync());
+            RefreshSoftwareLibraryCommand = new RelayCommand(async () => await RefreshSoftwareLibraryAsync());
             LoadDrivesCommand = new RelayCommand(async () => await LoadDrivesAsync());
             StartDeploymentCommand = new RelayCommand(async () => await StartDeploymentAsync());
             CancelDeploymentCommand = new RelayCommand(CancelDeployment);
             ShowSettingsCommand = new RelayCommand(ShowSettings);
             AddGameFolderCommand = new RelayCommand(async () => await AddGameFolderAsync());
+            AddSoftwareFolderCommand = new RelayCommand(async () => await AddSoftwareFolderAsync());
+            ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
+            ClearSoftwareSearchCommand = new RelayCommand(() => SoftwareSearchText = string.Empty);
 
             // Backup timer monitoring (much less frequent since we have real-time detection)
             _driveMonitorTimer = new Timer(30000); // Check every 30 seconds as backup
@@ -304,6 +366,7 @@ namespace GameCopier.ViewModels
                                     ? $"{driveToRemove.Label} ({driveToRemove.BrandName})" 
                                     : driveToRemove.Label ?? "USB Drive";
                                 
+
                                 AvailableDrives.Remove(driveToRemove);
                                 StatusText = $"?? USB drive removed: {driveDescription} - {removedDriveLetter}";
                                 System.Diagnostics.Debug.WriteLine($"? Drive removed from UI: {removedDriveLetter}");
@@ -379,6 +442,7 @@ namespace GameCopier.ViewModels
             {
                 StatusText = "?? Initializing GameDeploy Kiosk with USB-only detection...";
                 await LoadGamesAsync();
+                await LoadSoftwareAsync();
                 await LoadDrivesAsync();
                 StatusText = "? Initialization complete - USB-only monitoring active!";
                 
@@ -400,6 +464,21 @@ namespace GameCopier.ViewModels
                 System.Diagnostics.Debug.WriteLine("?? Loading games...");
                 var games = await _libraryService.GetGamesAsync();
                 
+                // Add sample data if no games found (for testing)
+                if (!games.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine("?? No games found, adding sample data for testing...");
+                    var sampleGames = new List<Game>
+                    {
+                        new Game { Name = "Super Mario Bros", SizeInBytes = 100L * 1024 * 1024 }, // 100MB
+                        new Game { Name = "The Legend of Zelda", SizeInBytes = 200L * 1024 * 1024 }, // 200MB
+                        new Game { Name = "Minecraft", SizeInBytes = 500L * 1024 * 1024 }, // 500MB
+                        new Game { Name = "Call of Duty", SizeInBytes = 2L * 1024 * 1024 * 1024 }, // 2GB
+                        new Game { Name = "Among Us", SizeInBytes = 50L * 1024 * 1024 } // 50MB
+                    };
+                    games = sampleGames;
+                }
+                
                 // Update on UI thread using stored dispatcher
                 if (_uiDispatcher != null)
                 {
@@ -412,6 +491,7 @@ namespace GameCopier.ViewModels
                         }
                         FilterGames();
                         UpdateStatusText();
+                        OnPropertyChanged(nameof(GameSearchResultsText));
                         System.Diagnostics.Debug.WriteLine($"? Loaded {games.Count()} games");
                     });
                 }
@@ -429,7 +509,7 @@ namespace GameCopier.ViewModels
             {
                 StatusText = "?? Scanning game library...";
                 System.Diagnostics.Debug.WriteLine("?? Refreshing game library...");
-                var games = await _libraryService.ScanLibraryAsync();
+                var games = await _libraryService.ScanGameLibraryAsync();
                 
                 // Update on UI thread using stored dispatcher
                 if (_uiDispatcher != null)
@@ -443,6 +523,7 @@ namespace GameCopier.ViewModels
                         }
                         FilterGames();
                         UpdateStatusText();
+                        OnPropertyChanged(nameof(GameSearchResultsText));
                         System.Diagnostics.Debug.WriteLine($"? Refreshed library with {games.Count()} games");
                     });
                 }
@@ -451,6 +532,84 @@ namespace GameCopier.ViewModels
             {
                 StatusText = $"? Error refreshing library: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"? Error refreshing library: {ex.Message}");
+            }
+        }
+
+        private async Task LoadSoftwareAsync()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("?? Loading software...");
+                var software = await _libraryService.GetSoftwareAsync();
+                
+                // Add sample data if no software found (for testing)
+                if (!software.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine("?? No software found, adding sample data for testing...");
+                    var sampleSoftware = new List<Software>
+                    {
+                        new Software { Name = "Microsoft Office", SizeInBytes = 3L * 1024 * 1024 * 1024 }, // 3GB
+                        new Software { Name = "Adobe Photoshop", SizeInBytes = 2L * 1024 * 1024 * 1024 }, // 2GB
+                        new Software { Name = "Visual Studio Code", SizeInBytes = 300L * 1024 * 1024 }, // 300MB
+                        new Software { Name = "Chrome Browser", SizeInBytes = 150L * 1024 * 1024 }, // 150MB
+                        new Software { Name = "Notepad++", SizeInBytes = 10L * 1024 * 1024 } // 10MB
+                    };
+                    software = sampleSoftware;
+                }
+                
+                // Update on UI thread using stored dispatcher
+                if (_uiDispatcher != null)
+                {
+                    _ = _uiDispatcher.TryEnqueue(() =>
+                    {
+                        Software.Clear();
+                        foreach (var softwareItem in software)
+                        {
+                            Software.Add(softwareItem);
+                        }
+                        FilterSoftware();
+                        UpdateStatusText();
+                        OnPropertyChanged(nameof(SoftwareSearchResultsText));
+                        System.Diagnostics.Debug.WriteLine($"? Loaded {software.Count()} software items");
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"? Error loading software: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? Error loading software: {ex.Message}");
+            }
+        }
+
+        private async Task RefreshSoftwareLibraryAsync()
+        {
+            try
+            {
+                StatusText = "?? Scanning software library...";
+                System.Diagnostics.Debug.WriteLine("?? Refreshing software library...");
+                var software = await _libraryService.ScanSoftwareLibraryAsync();
+                
+                // Update on UI thread using stored dispatcher
+                if (_uiDispatcher != null)
+                {
+                    _ = _uiDispatcher.TryEnqueue(() =>
+                    {
+                        Software.Clear();
+                        foreach (var softwareItem in software)
+                        {
+                            Software.Add(softwareItem);
+                        }
+                        FilterSoftware();
+                        UpdateStatusText();
+                        OnPropertyChanged(nameof(SoftwareSearchResultsText));
+                        System.Diagnostics.Debug.WriteLine($"? Refreshed software library with {software.Count()} items");
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"? Error refreshing software library: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? Error refreshing software library: {ex.Message}");
             }
         }
 
@@ -505,11 +664,12 @@ namespace GameCopier.ViewModels
             if (IsDeploymentRunning) return;
 
             var selectedGames = Games.Where(g => g.IsSelected).ToList();
+            var selectedSoftware = Software.Where(s => s.IsSelected).ToList();
             var selectedDrives = AvailableDrives.Where(d => d.IsSelected).ToList();
 
-            if (!selectedGames.Any())
+            if (!selectedGames.Any() && !selectedSoftware.Any())
             {
-                StatusText = "?? Please select at least one game to deploy.";
+                StatusText = "?? Please select at least one game or software to deploy.";
                 return;
             }
 
@@ -519,12 +679,16 @@ namespace GameCopier.ViewModels
                 return;
             }
 
+            // Combine games and software for space checking
+            var allSelectedItems = selectedGames.Cast<object>().Concat(selectedSoftware.Cast<object>()).ToList();
+            var totalSize = selectedGames.Sum(g => g.SizeInBytes) + selectedSoftware.Sum(s => s.SizeInBytes);
+
             // Check if drives have sufficient space
             foreach (var drive in selectedDrives)
             {
-                if (!_driveService.HasSufficientSpace(drive, selectedGames))
+                if (drive.FreeSizeInBytes < totalSize)
                 {
-                    StatusText = $"?? USB drive {drive.Name} does not have sufficient space for selected games.";
+                    StatusText = $"?? USB drive {drive.Name} does not have sufficient space for selected items.";
                     return;
                 }
             }
@@ -535,10 +699,13 @@ namespace GameCopier.ViewModels
                 _driveMonitorTimer.Stop(); // Stop monitoring during deployment
                 DeploymentJobs.Clear();
 
+                // Queue games and software for deployment
                 _deploymentService.QueueMultipleDeployments(selectedGames, selectedDrives);
+                // Note: You'll need to extend DeploymentService to handle Software as well
                 
-                StatusText = $"?? Starting deployment of {selectedGames.Count} games to {selectedDrives.Count} USB drives...";
-                System.Diagnostics.Debug.WriteLine($"?? Starting deployment: {selectedGames.Count} games to {selectedDrives.Count} USB drives");
+                var totalItems = selectedGames.Count + selectedSoftware.Count;
+                StatusText = $"?? Starting deployment of {totalItems} items to {selectedDrives.Count} USB drives...";
+                System.Diagnostics.Debug.WriteLine($"?? Starting deployment: {totalItems} items to {selectedDrives.Count} USB drives");
                 
                 await _deploymentService.StartDeploymentAsync();
                 
@@ -588,48 +755,116 @@ namespace GameCopier.ViewModels
             }
         }
 
+        private async Task AddSoftwareFolderAsync()
+        {
+            var folderPicker = new FolderPicker();
+            folderPicker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
+            folderPicker.FileTypeFilter.Add("*");
+
+            // Use the static MainWindow property from App
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(GameCopier.App.MainWindow);
+            WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
+
+            var folder = await folderPicker.PickSingleFolderAsync();
+            if (folder != null)
+            {
+                await _libraryService.AddSoftwareFolderAsync(folder.Path);
+                await LoadSoftwareAsync(); // Refresh the software list
+            }
+        }
+
         private void FilterGames()
         {
-            FilteredGames.Clear();
-            
-            var filtered = string.IsNullOrWhiteSpace(SearchText) 
-                ? Games 
-                : _libraryService.SearchGames(SearchText);
-
-            foreach (var game in filtered)
+            try
             {
-                FilteredGames.Add(game);
+                System.Diagnostics.Debug.WriteLine($"?? FilterGames called with SearchText: '{SearchText}'");
+                
+                FilteredGames.Clear();
+                
+                var filtered = string.IsNullOrWhiteSpace(SearchText) 
+                    ? Games 
+                    : _libraryService.SearchGames(SearchText);
+
+                System.Diagnostics.Debug.WriteLine($"?? FilterGames: Found {filtered.Count()} games matching '{SearchText}'");
+
+                foreach (var game in filtered)
+                {
+                    FilteredGames.Add(game);
+                }
+                
+                // Notify search results text changed
+                OnPropertyChanged(nameof(GameSearchResultsText));
+                
+                System.Diagnostics.Debug.WriteLine($"?? FilterGames completed: {FilteredGames.Count} games in filtered list");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? Error in FilterGames: {ex.Message}");
+            }
+        }
+
+        private void FilterSoftware()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware called with SoftwareSearchText: '{SoftwareSearchText}'");
+                
+                FilteredSoftware.Clear();
+                
+                var filtered = string.IsNullOrWhiteSpace(SoftwareSearchText) 
+                    ? Software 
+                    : _libraryService.SearchSoftware(SoftwareSearchText);
+
+                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware: Found {filtered.Count()} software matching '{SoftwareSearchText}'");
+
+                foreach (var softwareItem in filtered)
+                {
+                    FilteredSoftware.Add(softwareItem);
+                }
+                
+                // Notify search results text changed
+                OnPropertyChanged(nameof(SoftwareSearchResultsText));
+                
+                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware completed: {FilteredSoftware.Count} software in filtered list");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? Error in FilterSoftware: {ex.Message}");
             }
         }
 
         private void UpdateStatusText()
         {
             var selectedGames = Games.Where(g => g.IsSelected).ToList();
+            var selectedSoftware = Software.Where(s => s.IsSelected).ToList();
             var selectedDrives = AvailableDrives.Where(d => d.IsSelected).ToList();
             var mostRecentDrive = AvailableDrives.FirstOrDefault(d => d.IsRecentlyPlugged);
 
-            if (selectedGames.Any() && selectedDrives.Any())
+            var totalSelected = selectedGames.Count + selectedSoftware.Count;
+            var totalItems = Games.Count + Software.Count;
+
+            if ((selectedGames.Any() || selectedSoftware.Any()) && selectedDrives.Any())
             {
-                var totalSize = selectedGames.Sum(g => g.SizeInBytes);
+                var totalSize = selectedGames.Sum(g => g.SizeInBytes) + selectedSoftware.Sum(s => s.SizeInBytes);
                 var sizeText = FormatBytes(totalSize);
-                StatusText = $"? {selectedGames.Count} games ({sizeText}) selected for {selectedDrives.Count} USB drives. Ready to deploy!";
+                StatusText = $"? {totalSelected} items ({sizeText}) selected for {selectedDrives.Count} USB drives. Ready to deploy!";
             }
-            else if (selectedGames.Any())
+            else if (selectedGames.Any() || selectedSoftware.Any())
             {
-                var totalSize = selectedGames.Sum(g => g.SizeInBytes);
+                var totalSize = selectedGames.Sum(g => g.SizeInBytes) + selectedSoftware.Sum(s => s.SizeInBytes);
                 var sizeText = FormatBytes(totalSize);
-                StatusText = $"?? {selectedGames.Count} games ({sizeText}) selected. Please select USB drives.";
+                StatusText = $"?? {totalSelected} items ({sizeText}) selected. Please select USB drives.";
             }
             else if (selectedDrives.Any())
             {
-                StatusText = $"?? {selectedDrives.Count} USB drives selected. Please select games to deploy.";
+                StatusText = $"?? {selectedDrives.Count} USB drives selected. Please select games or software to deploy.";
             }
             else
             {
                 var driveText = AvailableDrives.Count > 0 ? $"{AvailableDrives.Count} USB drives" : "No USB drives";
                 var eventText = _usbEventCount > 0 ? $" | {_usbEventCount} USB events detected" : "";
                 var recentText = mostRecentDrive != null ? $" | Most recent: {mostRecentDrive.DriveLetter}" : "";
-                StatusText = $"?? {Games.Count} games available, {driveText} detected{eventText}{recentText}. USB-only monitoring active!";
+                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{eventText}{recentText}. USB-only monitoring active!";
             }
         }
 
@@ -723,6 +958,24 @@ namespace GameCopier.ViewModels
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Error - {ex.Message}");
+            }
+        }
+
+        public async Task RefreshDrivesAfterSettingsChange()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("?? Refreshing drives after settings change...");
+                
+                // Force reload drives with updated settings
+                await LoadDrivesAsync();
+                
+                System.Diagnostics.Debug.WriteLine("? Drive refresh completed after settings change");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? Error refreshing drives after settings change: {ex.Message}");
+                StatusText = $"?? Error refreshing drives: {ex.Message}";
             }
         }
     }

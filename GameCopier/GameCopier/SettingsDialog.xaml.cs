@@ -17,7 +17,8 @@ namespace GameCopier
     {
         private readonly LibraryService _libraryService;
         private readonly SettingsService _settingsService;
-        private ObservableCollection<string> _folders;
+        private ObservableCollection<string> _gameFolders;
+        private ObservableCollection<string> _softwareFolders;
         private StackPanel _foldersPanel = new();
         private StackPanel _driveSettingsPanel = new();
 
@@ -29,7 +30,8 @@ namespace GameCopier
             
             _libraryService = new LibraryService();
             _settingsService = new SettingsService();
-            _folders = new ObservableCollection<string>(_libraryService.GetGameFolders());
+            _gameFolders = new ObservableCollection<string>(_libraryService.GetGameFolders());
+            _softwareFolders = new ObservableCollection<string>(_libraryService.GetSoftwareFolders());
 
             // Create main scroll viewer
             var scrollViewer = new ScrollViewer
@@ -41,7 +43,7 @@ namespace GameCopier
 
             var mainPanel = new StackPanel { Spacing = 20 };
 
-            // Game Library Section
+            // Library Section with TabView
             var librarySection = CreateLibrarySection();
             mainPanel.Children.Add(librarySection);
 
@@ -59,25 +61,54 @@ namespace GameCopier
             
             var header = new TextBlock 
             { 
-                Text = "Game Library Folders:", 
+                Text = "Library Folders:", 
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 FontSize = 16,
                 Margin = new Thickness(0,0,0,8) 
             };
             section.Children.Add(header);
 
-            _foldersPanel = new StackPanel();
-            RefreshFoldersPanel();
-            section.Children.Add(_foldersPanel);
-
-            var addButton = new Button 
+            // Create TabView for Games and Software folders
+            var tabView = new TabView();
+            
+            // Games Tab
+            var gamesTab = new TabViewItem { Header = "Game Folders" };
+            var gamesFoldersPanel = new StackPanel();
+            RefreshGameFoldersPanel(gamesFoldersPanel);
+            
+            var addGameButton = new Button 
             { 
-                Content = "Add Folder", 
+                Content = "Add Game Folder", 
                 Margin = new Thickness(0,8,0,0) 
             };
-            addButton.Click += async (s, e) => await AddFolderAsync();
-            section.Children.Add(addButton);
-
+            addGameButton.Click += async (s, e) => await AddGameFolderAsync();
+            
+            var gamesContent = new StackPanel();
+            gamesContent.Children.Add(gamesFoldersPanel);
+            gamesContent.Children.Add(addGameButton);
+            gamesTab.Content = gamesContent;
+            
+            // Software Tab
+            var softwareTab = new TabViewItem { Header = "Software Folders" };
+            var softwareFoldersPanel = new StackPanel();
+            RefreshSoftwareFoldersPanel(softwareFoldersPanel);
+            
+            var addSoftwareButton = new Button 
+            { 
+                Content = "Add Software Folder", 
+                Margin = new Thickness(0,8,0,0) 
+            };
+            addSoftwareButton.Click += async (s, e) => await AddSoftwareFolderAsync();
+            
+            var softwareContent = new StackPanel();
+            softwareContent.Children.Add(softwareFoldersPanel);
+            softwareContent.Children.Add(addSoftwareButton);
+            softwareTab.Content = softwareContent;
+            
+            tabView.TabItems.Add(gamesTab);
+            tabView.TabItems.Add(softwareTab);
+            
+            section.Children.Add(tabView);
             return section;
         }
 
@@ -370,10 +401,10 @@ namespace GameCopier
             System.Diagnostics.Debug.WriteLine($"?? Updated drive setting {propertyName} = {value}");
         }
 
-        private void RefreshFoldersPanel()
+        private void RefreshGameFoldersPanel(StackPanel panel)
         {
-            _foldersPanel.Children.Clear();
-            foreach (var folder in _folders)
+            panel.Children.Clear();
+            foreach (var folder in _gameFolders)
             {
                 var folderPanel = new StackPanel
                 {
@@ -397,14 +428,48 @@ namespace GameCopier
                 };
 
                 var currentFolder = folder; // Capture for closure
-                removeButton.Click += async (s, e) => await RemoveFolderAsync(currentFolder);
+                removeButton.Click += async (s, e) => await RemoveGameFolderAsync(currentFolder, panel);
 
                 folderPanel.Children.Add(removeButton);
-                _foldersPanel.Children.Add(folderPanel);
+                panel.Children.Add(folderPanel);
             }
         }
 
-        private async Task AddFolderAsync()
+        private void RefreshSoftwareFoldersPanel(StackPanel panel)
+        {
+            panel.Children.Clear();
+            foreach (var folder in _softwareFolders)
+            {
+                var folderPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(0, 0, 0, 4)
+                };
+
+                folderPanel.Children.Add(new TextBlock 
+                { 
+                    Text = folder, 
+                    VerticalAlignment = VerticalAlignment.Center, 
+                    Margin = new Thickness(0, 0, 8, 0) 
+                });
+
+                var removeButton = new Button
+                {
+                    Content = "Remove",
+                    FontSize = 12,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 53, 69))
+                };
+
+                var currentFolder = folder; // Capture for closure
+                removeButton.Click += async (s, e) => await RemoveSoftwareFolderAsync(currentFolder, panel);
+
+                folderPanel.Children.Add(removeButton);
+                panel.Children.Add(folderPanel);
+            }
+        }
+
+        private async Task AddGameFolderAsync()
         {
             try
             {
@@ -418,11 +483,9 @@ namespace GameCopier
                     InitializeWithWindow.Initialize(picker, hwnd);
                 }
 
-                // Convert WinRT IAsyncOperation to Task
                 var operation = picker.PickSingleFolderAsync();
                 StorageFolder? storageFolder = null;
 
-                // Use TaskCompletionSource to convert WinRT async to .NET Task
                 var tcs = new TaskCompletionSource<StorageFolder?>();
                 operation.Completed = (asyncInfo, status) =>
                 {
@@ -448,31 +511,101 @@ namespace GameCopier
                 if (storageFolder != null)
                 {
                     var folderPath = storageFolder.Path;
-                    if (!_folders.Contains(folderPath))
+                    if (!_gameFolders.Contains(folderPath))
                     {
                         await _libraryService.AddGameFolderAsync(folderPath);
-                        _folders.Add(folderPath);
-                        RefreshFoldersPanel();
+                        _gameFolders.Add(folderPath);
+                        // Need to refresh the panel - this would require storing a reference to it
                     }
                 }
             }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error adding folder: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error adding game folder: {ex.Message}");
             }
         }
 
-        private async Task RemoveFolderAsync(string folderPath)
+        private async Task AddSoftwareFolderAsync()
+        {
+            try
+            {
+                var picker = new FolderPicker();
+                picker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
+                picker.FileTypeFilter.Add("*");
+
+                if (App.MainWindow != null)
+                {
+                    var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
+                    InitializeWithWindow.Initialize(picker, hwnd);
+                }
+
+                var operation = picker.PickSingleFolderAsync();
+                StorageFolder? storageFolder = null;
+
+                var tcs = new TaskCompletionSource<StorageFolder?>();
+                operation.Completed = (asyncInfo, status) =>
+                {
+                    try
+                    {
+                        if (status == Windows.Foundation.AsyncStatus.Completed)
+                        {
+                            tcs.SetResult(asyncInfo.GetResults());
+                        }
+                        else
+                        {
+                            tcs.SetResult(null);
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                };
+
+                storageFolder = await tcs.Task;
+
+                if (storageFolder != null)
+                {
+                    var folderPath = storageFolder.Path;
+                    if (!_softwareFolders.Contains(folderPath))
+                    {
+                        await _libraryService.AddSoftwareFolderAsync(folderPath);
+                        _softwareFolders.Add(folderPath);
+                        // Need to refresh the panel - this would require storing a reference to it
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error adding software folder: {ex.Message}");
+            }
+        }
+
+        private async Task RemoveGameFolderAsync(string folderPath, StackPanel panel)
         {
             try
             {
                 await _libraryService.RemoveGameFolderAsync(folderPath);
-                _folders.Remove(folderPath);
-                RefreshFoldersPanel();
+                _gameFolders.Remove(folderPath);
+                RefreshGameFoldersPanel(panel);
             }
             catch (System.Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error removing folder: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error removing game folder: {ex.Message}");
+            }
+        }
+
+        private async Task RemoveSoftwareFolderAsync(string folderPath, StackPanel panel)
+        {
+            try
+            {
+                await _libraryService.RemoveSoftwareFolderAsync(folderPath);
+                _softwareFolders.Remove(folderPath);
+                RefreshSoftwareFoldersPanel(panel);
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error removing software folder: {ex.Message}");
             }
         }
     }

@@ -3,7 +3,6 @@ using Microsoft.UI.Xaml.Controls;
 using GameCopier.ViewModels;
 using System;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace GameCopier
 {
@@ -24,7 +23,13 @@ namespace GameCopier
         private async void OnRequestSettingsDialog(object? sender, EventArgs e)
         {
             var dialog = new SettingsDialog();
+            
+            // Show the dialog and wait for it to close
             await dialog.ShowAsync();
+            
+            // After the settings dialog closes, refresh the drives to apply any changes
+            System.Diagnostics.Debug.WriteLine("?? Settings dialog closed, refreshing drives...");
+            await ViewModel.RefreshDrivesAfterSettingsChange();
         }
     }
 }

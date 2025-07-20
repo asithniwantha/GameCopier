@@ -11,30 +11,36 @@ namespace GameCopier.Services
     public class LibraryService
     {
         private List<string> _gameFolders;
-        private readonly string _configFilePath;
+        private List<string> _softwareFolders;
+        private readonly string _gameConfigFilePath;
+        private readonly string _softwareConfigFilePath;
         private List<Game> _gameCache = new();
+        private List<Software> _softwareCache = new();
 
         public LibraryService()
         {
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var configFolder = Path.Combine(appDataPath, "GameCopier");
             Directory.CreateDirectory(configFolder);
-            _configFilePath = Path.Combine(configFolder, "gamefolders.json");
+            _gameConfigFilePath = Path.Combine(configFolder, "gamefolders.json");
+            _softwareConfigFilePath = Path.Combine(configFolder, "softwarefolders.json");
             _gameFolders = LoadGameFolders();
+            _softwareFolders = LoadSoftwareFolders();
         }
 
+        #region Game Management
         private List<string> LoadGameFolders()
         {
             try
             {
-                if (!File.Exists(_configFilePath))
+                if (!File.Exists(_gameConfigFilePath))
                 {
                     // Default folder if config doesn't exist
                     var defaultFolders = new List<string> { "C:\\GameLibrary" };
                     SaveGameFolders(defaultFolders);
                     return defaultFolders;
                 }
-                var json = File.ReadAllText(_configFilePath);
+                var json = File.ReadAllText(_gameConfigFilePath);
                 return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
             }
             catch (Exception ex)
@@ -49,7 +55,7 @@ namespace GameCopier.Services
             try
             {
                 var json = JsonSerializer.Serialize(folders, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_configFilePath, json);
+                File.WriteAllText(_gameConfigFilePath, json);
             }
             catch (Exception ex)
             {
@@ -63,7 +69,7 @@ namespace GameCopier.Services
             {
                 _gameFolders.Add(folderPath);
                 SaveGameFolders(_gameFolders);
-                await ScanLibraryAsync(); // Rescan library after adding a new folder
+                await ScanGameLibraryAsync(); // Rescan library after adding a new folder
             }
         }
 
@@ -73,7 +79,7 @@ namespace GameCopier.Services
             {
                 _gameFolders.Remove(folderPath);
                 SaveGameFolders(_gameFolders);
-                await ScanLibraryAsync(); // Rescan library after removing a folder
+                await ScanGameLibraryAsync(); // Rescan library after removing a folder
             }
         }
 
@@ -86,12 +92,12 @@ namespace GameCopier.Services
         {
             if (!_gameCache.Any())
             {
-                await ScanLibraryAsync();
+                await ScanGameLibraryAsync();
             }
             return _gameCache;
         }
 
-        public async Task<IEnumerable<Game>> ScanLibraryAsync()
+        public async Task<IEnumerable<Game>> ScanGameLibraryAsync()
         {
             return await Task.Run(() =>
             {
@@ -122,7 +128,7 @@ namespace GameCopier.Services
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error scanning library path {libraryPath}: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"Error scanning game library path {libraryPath}: {ex.Message}");
                     }
                 }
                 _gameCache = games.OrderBy(g => g.Name).ToList();
@@ -137,6 +143,132 @@ namespace GameCopier.Services
 
             return _gameCache.Where(g => g.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
         }
+        #endregion
+
+        #region Software Management
+        private List<string> LoadSoftwareFolders()
+        {
+            try
+            {
+                if (!File.Exists(_softwareConfigFilePath))
+                {
+                    // Default folder if config doesn't exist
+                    var defaultFolders = new List<string> { "C:\\SoftwareLibrary" };
+                    SaveSoftwareFolders(defaultFolders);
+                    return defaultFolders;
+                }
+                var json = File.ReadAllText(_softwareConfigFilePath);
+                return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading software folders: {ex.Message}");
+                return new List<string>();
+            }
+        }
+
+        private void SaveSoftwareFolders(List<string> folders)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(folders, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_softwareConfigFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving software folders: {ex.Message}");
+            }
+        }
+
+        public async Task AddSoftwareFolderAsync(string folderPath)
+        {
+            if (!_softwareFolders.Contains(folderPath))
+            {
+                _softwareFolders.Add(folderPath);
+                SaveSoftwareFolders(_softwareFolders);
+                await ScanSoftwareLibraryAsync(); // Rescan library after adding a new folder
+            }
+        }
+
+        public async Task RemoveSoftwareFolderAsync(string folderPath)
+        {
+            if (_softwareFolders.Contains(folderPath))
+            {
+                _softwareFolders.Remove(folderPath);
+                SaveSoftwareFolders(_softwareFolders);
+                await ScanSoftwareLibraryAsync(); // Rescan library after removing a folder
+            }
+        }
+
+        public IEnumerable<string> GetSoftwareFolders()
+        {
+            return _softwareFolders.AsEnumerable();
+        }
+
+        public async Task<IEnumerable<Software>> GetSoftwareAsync()
+        {
+            if (!_softwareCache.Any())
+            {
+                await ScanSoftwareLibraryAsync();
+            }
+            return _softwareCache;
+        }
+
+        public async Task<IEnumerable<Software>> ScanSoftwareLibraryAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var software = new List<Software>();
+                foreach (var libraryPath in _softwareFolders)
+                {
+                    if (!Directory.Exists(libraryPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Warning: Software library path not found: {libraryPath}");
+                        continue;
+                    }
+
+                    try
+                    {
+                        var softwareDirectories = Directory.GetDirectories(libraryPath);
+
+                        foreach (var softwareDir in softwareDirectories)
+                        {
+                            var dirInfo = new DirectoryInfo(softwareDir);
+                            var size = GetDirectorySize(dirInfo);
+
+                            var softwareItem = new Software();
+                            softwareItem.Name = dirInfo.Name;
+                            softwareItem.FolderPath = softwareDir;
+                            softwareItem.SizeInBytes = size;
+                            software.Add(softwareItem);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error scanning software library path {libraryPath}: {ex.Message}");
+                    }
+                }
+                _softwareCache = software.OrderBy(s => s.Name).ToList();
+                return _softwareCache;
+            });
+        }
+
+        public IEnumerable<Software> SearchSoftware(string searchTerm)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+                return _softwareCache;
+
+            return _softwareCache.Where(s => s.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+        }
+        #endregion
+
+        #region Legacy Methods (for backward compatibility)
+        [Obsolete("Use ScanGameLibraryAsync instead")]
+        public async Task<IEnumerable<Game>> ScanLibraryAsync()
+        {
+            return await ScanGameLibraryAsync();
+        }
+        #endregion
 
         private static long GetDirectorySize(DirectoryInfo dirInfo)
         {

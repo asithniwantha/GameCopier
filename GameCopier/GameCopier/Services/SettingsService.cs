@@ -10,6 +10,9 @@ namespace GameCopier.Services
         private readonly string _configFilePath;
         private DriveDisplaySettings _settings;
 
+        // Event to notify when settings change
+        public event EventHandler<DriveDisplaySettings>? SettingsChanged;
+
         public SettingsService()
         {
             var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
@@ -29,6 +32,9 @@ namespace GameCopier.Services
                 var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(_configFilePath, json);
                 System.Diagnostics.Debug.WriteLine($"? Drive settings saved: {json}");
+                
+                // Notify subscribers that settings have changed
+                SettingsChanged?.Invoke(this, _settings);
             }
             catch (Exception ex)
             {

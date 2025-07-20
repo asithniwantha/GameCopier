@@ -57,89 +57,181 @@
                 <ColumnDefinition Width="1.5*" MinWidth="250"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Game Library Section -->
+            <!-- Library Tabs Section -->
             <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+                <TabView>
+                    <!-- Games Tab -->
+                    <TabViewItem Header="Games">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                    <TextBlock Text="GAME LIBRARY" FontWeight="SemiBold" FontSize="14" 
-                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
-                    <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
-                           Command="{Binding RefreshLibraryCommand}" 
-                           Background="Transparent" BorderThickness="1"
-                           ToolTipService.ToolTip="Refresh Library">
-                        <StackPanel Orientation="Horizontal">
-                            <FontIcon Glyph="&#xE72C;" FontSize="10" Margin="0,0,4,0"/>
-                            <TextBlock Text="Refresh" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
-                           Command="{Binding AddGameFolderCommand}" 
-                           Background="Transparent" BorderThickness="1"
-                           ToolTipService.ToolTip="Add new game folder">
-                        <StackPanel Orientation="Horizontal">
-                            <FontIcon Glyph="&#xE8B5;" FontSize="10" Margin="0,0,4,0"/>
-                            <TextBlock Text="Add Folder" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="GAME LIBRARY" FontWeight="SemiBold" FontSize="14" 
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+                                <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
+                                       Command="{Binding RefreshLibraryCommand}" 
+                                       Background="Transparent" BorderThickness="1"
+                                       ToolTipService.ToolTip="Refresh Library">
+                                    <StackPanel Orientation="Horizontal">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="10" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Refresh" FontSize="10"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
+                                       Command="{Binding AddGameFolderCommand}" 
+                                       Background="Transparent" BorderThickness="1"
+                                       ToolTipService.ToolTip="Add new game folder">
+                                    <StackPanel Orientation="Horizontal">
+                                        <FontIcon Glyph="&#xE8B5;" FontSize="10" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Add Folder" FontSize="10"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
 
-                <TextBox Grid.Row="1" x:Name="SearchBox" PlaceholderText="Search games..." 
-                        Text="{Binding SearchText, Mode=TwoWay}"
-                        Margin="0,0,0,12">
-                    <TextBox.Template>
-                        <ControlTemplate TargetType="TextBox">
-                            <Grid>
-                                <Border Background="{TemplateBinding Background}"
-                                       BorderBrush="{TemplateBinding BorderBrush}"
-                                       BorderThickness="{TemplateBinding BorderThickness}"
-                                       CornerRadius="4">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <FontIcon Grid.Column="0" Glyph="&#xE721;" Margin="12,0,8,0" 
-                                                 FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                        <ScrollViewer Grid.Column="1" x:Name="ContentElement" Margin="0,8,12,8"/>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </TextBox.Template>
-                </TextBox>
-
-                <ListView Grid.Row="2" x:Name="GamesListView" ItemsSource="{Binding FilteredGames}"
-                         SelectionMode="None" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                         CornerRadius="8" Padding="8">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="models:Game">
-                            <Grid Padding="12,8" Background="Transparent">
+                            <!-- Simple search box for testing -->
+                            <Grid Grid.Row="1" Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-
-                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" 
-                                         VerticalAlignment="Center" Margin="0,0,12,0"/>
-
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="12" 
-                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                </StackPanel>
-
-                                <FontIcon Grid.Column="2" Glyph="&#xE91B;" FontSize="14" 
-                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                
+                                <TextBox Grid.Column="0" x:Name="SearchBox" PlaceholderText="Search games..." 
+                                        Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                
+                                <Button Grid.Column="1" Content="Clear" Margin="8,0,0,0"
+                                       Command="{Binding ClearSearchCommand}"
+                                       Visibility="{Binding SearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
                             </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
+
+                            <StackPanel Grid.Row="2" Orientation="Vertical">
+                                <!-- Search results info -->
+                                <TextBlock Text="{Binding GameSearchResultsText}" 
+                                          FontSize="11" 
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          Margin="0,0,0,8"
+                                          Visibility="{Binding SearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                 
+                                <ListView x:Name="GamesListView" ItemsSource="{Binding FilteredGames}"
+                                         SelectionMode="None" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                         CornerRadius="8" Padding="8">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:Game">
+                                            <Grid Padding="12,8" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                         VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="12" 
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+
+                                                <FontIcon Grid.Column="2" Glyph="&#xE91B;" FontSize="14" 
+                                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Grid>
+                    </TabViewItem>
+
+                    <!-- Software Tab -->
+                    <TabViewItem Header="Software">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="SOFTWARE LIBRARY" FontWeight="SemiBold" FontSize="14" 
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+                                <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
+                                       Command="{Binding RefreshSoftwareLibraryCommand}" 
+                                       Background="Transparent" BorderThickness="1"
+                                       ToolTipService.ToolTip="Refresh Software Library">
+                                    <StackPanel Orientation="Horizontal">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="10" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Refresh" FontSize="10"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Margin="12,0,0,0" FontSize="10" Padding="8,4" 
+                                       Command="{Binding AddSoftwareFolderCommand}" 
+                                       Background="Transparent" BorderThickness="1"
+                                       ToolTipService.ToolTip="Add new software folder">
+                                    <StackPanel Orientation="Horizontal">
+                                        <FontIcon Glyph="&#xE8B5;" FontSize="10" Margin="0,0,4,0"/>
+                                        <TextBlock Text="Add Folder" FontSize="10"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- Simple search box for testing -->
+                            <Grid Grid.Row="1" Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <TextBox Grid.Column="0" x:Name="SoftwareSearchBox" PlaceholderText="Search software..." 
+                                        Text="{Binding SoftwareSearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                
+                                <Button Grid.Column="1" Content="Clear" Margin="8,0,0,0"
+                                       Command="{Binding ClearSoftwareSearchCommand}"
+                                       Visibility="{Binding SoftwareSearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="2" Orientation="Vertical">
+                                <!-- Search results info -->
+                                <TextBlock Text="{Binding SoftwareSearchResultsText}" 
+                                          FontSize="11" 
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          Margin="0,0,0,8"
+                                          Visibility="{Binding SoftwareSearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                 
+                                <ListView x:Name="SoftwareListView" ItemsSource="{Binding FilteredSoftware}"
+                                         SelectionMode="None" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                         CornerRadius="8" Padding="8">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:Software">
+                                            <Grid Padding="12,8" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" 
+                                                         VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding SizeDisplay}" FontSize="12" 
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                </StackPanel>
+
+                                                <FontIcon Grid.Column="2" Glyph="&#xE770;" FontSize="14" 
+                                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Grid>
+                    </TabViewItem>
+                </TabView>
             </Grid>
 
             <!-- Target Drives Section -->
