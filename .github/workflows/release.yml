@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      
+    - name: Get version from tag
+      id: get_version
+      run: |
+        $version = "${{ github.ref }}" -replace "refs/tags/v", ""
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "TAG_NAME=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+      
+    - name: Update version in project file
+      run: |
+        $projectFile = "GameCopier/GameCopier/GameCopier.csproj"
+        $content = Get-Content $projectFile
+        $content = $content -replace "<Version>.*</Version>", "<Version>${{ steps.get_version.outputs.VERSION }}</Version>"
+        $content = $content -replace "<AssemblyVersion>.*</AssemblyVersion>", "<AssemblyVersion>${{ steps.get_version.outputs.VERSION }}</AssemblyVersion>"
+        $content = $content -replace "<FileVersion>.*</FileVersion>", "<FileVersion>${{ steps.get_version.outputs.VERSION }}</FileVersion>"
+        Set-Content $projectFile $content
+      shell: pwsh
+      
+    - name: Restore dependencies
+      run: dotnet restore GameCopier/GameCopier/GameCopier.csproj
+      
+    - name: Build Release x64
+      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x64 --no-restore
+      
+    - name: Build Release x86
+      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x86 --no-restore
+      
+    - name: Build Release ARM64
+      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch arm64 --no-restore
+      
+    - name: Publish x64
+      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x64 --self-contained true --output ./publish/x64
+      
+    - name: Publish x86
+      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x86 --self-contained true --output ./publish/x86
+      
+    - name: Publish ARM64
+      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch arm64 --self-contained true --output ./publish/arm64
+      
+    - name: Create release archives
+      run: |
+        Compress-Archive -Path "./publish/x64/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-x64.zip"
+        Compress-Archive -Path "./publish/x86/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-x86.zip"
+        Compress-Archive -Path "./publish/arm64/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-arm64.zip"
+      shell: pwsh
+      
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Extract changelog for this version
+        $changelogContent = Get-Content "CHANGELOG.md" -Raw
+        $pattern = "## \[${{ steps.get_version.outputs.VERSION }}\].*?(?=## \[|\z)"
+        $versionChangelog = [regex]::Match($changelogContent, $pattern, [Text.RegularExpressions.RegexOptions]::Singleline).Value
+        
+        if ([string]::IsNullOrEmpty($versionChangelog)) {
+          $versionChangelog = "### Changes`n- See full changelog in CHANGELOG.md"
+        }
+        
+        # Save to file for the release
+        $versionChangelog | Out-File -FilePath "release-notes.md" -Encoding UTF8
+        
+        # Set output for GitHub (escape newlines)
+        $escapedChangelog = $versionChangelog -replace "`r`n", "%0A" -replace "`n", "%0A"
+        echo "CHANGELOG=$escapedChangelog" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+      
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: GameCopier ${{ steps.get_version.outputs.VERSION }}
+        body_path: release-notes.md
+        files: |
+          GameCopier-${{ steps.get_version.outputs.VERSION }}-x64.zip
+          GameCopier-${{ steps.get_version.outputs.VERSION }}-x86.zip
+          GameCopier-${{ steps.get_version.outputs.VERSION }}-arm64.zip
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

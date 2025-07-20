@@ -1,0 +1,68 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        platform: [x64, x86]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      
+    - name: Restore dependencies
+      run: dotnet restore GameCopier/GameCopier/GameCopier.csproj
+      
+    - name: Build
+      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration ${{ matrix.configuration }} --no-restore --verbosity normal
+      
+    - name: Run tests
+      run: dotnet test GameCopier/GameCopier/GameCopier.csproj --configuration ${{ matrix.configuration }} --no-build --verbosity normal --collect:"XPlat Code Coverage"
+      continue-on-error: true
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: matrix.configuration == 'Release' && matrix.platform == 'x64'
+      with:
+        name: GameCopier-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: |
+          GameCopier/GameCopier/bin/${{ matrix.configuration }}/
+          !GameCopier/GameCopier/bin/${{ matrix.configuration }}/**/*.pdb
+        retention-days: 7
+
+  code-quality:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore GameCopier/GameCopier/GameCopier.csproj
+      
+    - name: Format check
+      run: dotnet format GameCopier/GameCopier/GameCopier.csproj --verify-no-changes --verbosity diagnostic
+      continue-on-error: true
+      
+    - name: Analyze code
+      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --verbosity normal /p:RunAnalyzersDuringBuild=true /p:TreatWarningsAsErrors=false

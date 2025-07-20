@@ -1,244 +1,174 @@
-# GameDeploy Kiosk Application v1.2
+# GameCopier
 
-A high-efficiency Windows application built with C# and WinUI 3, designed for game retail stores to rapidly copy multiple game installations onto customer-provided external drives.
+A modern WinUI 3 desktop application for Windows that enables fast, user-friendly deployment of game folders to USB drives and external storage devices.
 
-## ?? **What's New in v1.2**
+[![.NET](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/microsoft/WindowsAppSDK)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-### **Real-Time USB Detection**
-- ? **Instant USB drive detection** using Windows Management Instrumentation (WMI)
-- ? **Live monitoring** - Drives appear/disappear automatically when plugged/unplugged
-- ? **Visual indicators** - Green "LIVE" indicator shows real-time detection is active
-- ? **USB identification** - Proper filtering to show only actual USB/removable drives
-- ? **Enhanced UI** - Clear distinction between USB drives and demo drives
+## ? Features
 
-### **Improved User Experience**
-- ? **Smart status messages** with emoji indicators for quick visual feedback
-- ? **Real-time notifications** when USB drives are detected
-- ? **USB drive icons** to clearly identify removable storage
-- ? **Better error handling** with descriptive messages
+### ?? Game Library Management
+- **Multiple Game Directories**: Add and manage multiple game library folders
+- **Automatic Scanning**: Automatically detects games in configured directories
+- **Real-time Search**: Quick search functionality across your entire game library
+- **Size Calculation**: Displays game sizes with automatic folder size calculation
 
----
+### ?? Advanced Drive Detection
+- **Smart Drive Recognition**: Detects USB drives, external hard drives, and network storage
+- **Real-time Monitoring**: Automatic detection of newly connected drives with visual highlighting
+- **Enhanced Drive Information**: Shows drive brands, models, file systems, and detailed capacity info
+- **Customizable Filtering**: Show/hide different drive types (USB, Fixed, Network, CD/DVD, RAM)
 
-## Features
+### ?? Comprehensive Settings
+- **Drive Type Filters**: Choose which types of drives to display
+- **Individual Drive Hiding**: Hide specific drive letters from the main interface
+- **Quick Actions**: Bulk show/hide operations for drive management
+- **Persistent Configuration**: All settings saved between sessions
 
-### Core Functionality
-- **Multi-Drive Management**: Automatically detects and manages multiple USB drives simultaneously
-- **Centralized Game Library**: Scans and indexes games from a configurable library location
-- **Parallel Copy Engine**: Performs concurrent copy operations to different drives for maximum throughput
-- **Real-time Progress Tracking**: Individual and overall progress monitoring with detailed status updates
-- **Robust Error Handling**: Isolated failure handling that doesn't affect other ongoing operations
+### ?? High-Performance Deployment
+- **Bulk Operations**: Deploy multiple games to multiple drives simultaneously
+- **Parallel Processing**: Multi-threaded copying for maximum speed
+- **Progress Tracking**: Real-time progress indicators for each deployment job
+- **Space Validation**: Automatic space checking before deployment starts
 
-### User Experience
-- **Intuitive Kiosk Interface**: Clean, dark-themed UI optimized for fast-paced retail environments
-- **Instant Search**: High-performance search filtering for large game libraries
-- **Pre-deployment Validation**: Automatic space checking before starting copy operations
-- **One-click Deployment**: Simple workflow to minimize training time
-- **Live USB Detection**: Real-time monitoring of USB drive connections
+### ??? Modern User Interface
+- **WinUI 3**: Native Windows 11-style interface with smooth animations
+- **Responsive Design**: Adapts to different window sizes and screen resolutions
+- **Dark/Light Theme**: Follows system theme preferences
+- **Accessibility**: Full keyboard navigation and screen reader support
 
-### Technical Features
-- **Async/Await Architecture**: Fully asynchronous operations prevent UI freezing
-- **Thread-safe Operations**: Concurrent copy jobs with thread-safe progress reporting
-- **WMI Integration**: Windows Management Instrumentation for real-time USB detection
-- **Logging System**: Comprehensive deployment logging for store records
-- **MVVM Pattern**: Clean separation of concerns with data binding
+## ?? System Requirements
 
-## System Requirements
+- **OS**: Windows 10 version 1809 (build 17763) or later
+- **Runtime**: .NET 9.0 Runtime
+- **Architecture**: x86, x64, or ARM64
+- **Memory**: 512 MB RAM minimum, 1 GB recommended
+- **Storage**: 100 MB free disk space
 
-- Windows 10 version 1809 (build 17763) or later
-- .NET 9 runtime
-- USB 3.0 ports for optimal performance
-- Minimum 4GB RAM (8GB recommended for large deployments)
-- Administrator privileges (for WMI USB detection)
+## ?? Installation
 
-## Installation
+### Option 1: Download Release
+1. Go to the [Releases](../../releases) page
+2. Download the latest `.msix` package
+3. Double-click to install
 
-1. Download the MSIX package from the releases section
-2. Install the package by double-clicking the .msix file
-3. Launch "GameDeploy Kiosk" from the Start menu
-4. **Important**: Run as Administrator for full USB detection capabilities
+### Option 2: Build from Source# Clone the repository
+git clone https://github.com/yourusername/GameCopier.git
+cd GameCopier
 
-## Configuration
+# Restore dependencies
+dotnet restore
 
-### Game Library Setup
-1. Create a directory for your game library (default: `C:\GameLibrary`)
-2. Organize games in individual folders within the library directory
-3. Each game folder should contain the complete game installation files
-4. The application will automatically scan and index the library on startup
+# Build the application
+dotnet build --configuration Release
 
-### Library Structure ExampleC:\GameLibrary\
-??? Cyberpunk 2077\
-?   ??? bin\
-?   ??? engine\
-?   ??? Cyberpunk2077.exe
-??? The Witcher 3\
-?   ??? content\
-?   ??? DLC\
-?   ??? witcher3.exe
-??? Elden Ring\
-    ??? Game\
-    ??? eldenring.exe
-## Usage
+# Run the application
+dotnet run --project GameCopier/GameCopier/GameCopier.csproj
+## ?? Quick Start Guide
 
-### For Store Employees
+### 1. Configure Game Libraries
+1. Open **Settings** (gear icon in top-right)
+2. In **Game Library Folders** section, click **Add Folder**
+3. Select your game directories (e.g., Steam library, Epic Games, custom folders)
+4. Click **Close** - games will be automatically scanned
 
-1. **Connect Customer Drives**: Insert customer USB drives into available ports
-   - **NEW**: Drives appear automatically within 1-2 seconds!
-   - Green "LIVE" indicator confirms real-time detection is active
-   - USB icon appears next to actual USB/removable drives
+### 2. Configure Drive Display
+1. In **Settings** ? **Drive Display Settings**
+2. Enable **Show Internal/Fixed Drives** to see USB hard drives
+3. Optionally hide specific drive letters you don't want to see
+4. Use quick actions: **Show All Drives** or **Hide All Non-System**
 
-2. **Select Games**: Use the search box to find games, then check desired games
-3. **Select Target Drives**: Check the drives where games should be copied
-4. **Start Deployment**: Click "START DEPLOYMENT" to begin copying
-5. **Monitor Progress**: Watch individual job progress and overall completion
-6. **Handle Issues**: Failed jobs are clearly marked and don't affect other operations
+### 3. Deploy Games
+1. **Select Games**: Check games you want to deploy from the left panel
+2. **Select Drives**: Check target USB drives from the right panel
+3. **Start Deployment**: Click the deploy button to begin copying
+4. **Monitor Progress**: Watch real-time progress for each deployment job
 
-### ?? **New Real-Time Features**
+## ??? Architecture
 
-- **Automatic Detection**: No more manual refresh clicks - drives appear instantly
-- **Live Status**: Green dot and "LIVE" text show the system is actively monitoring
-- **Smart Notifications**: Status updates when drives are detected
-- **USB Filtering**: Only shows actual USB drives (no more confusion with internal drives)
+### Core Components
+- **LibraryService**: Manages game discovery and library configuration
+- **DriveService**: Handles drive detection, filtering, and information retrieval
+- **DeploymentService**: Orchestrates multi-threaded game deployment operations
+- **SettingsService**: Manages user preferences and configuration persistence
+- **UsbDriveDetectionService**: Real-time USB drive monitoring and event handling
 
-## Technical Architecture
+### Key Technologies
+- **WinUI 3**: Modern Windows UI framework
+- **MVVM Pattern**: Clean separation between UI and business logic
+- **System.Management**: WMI integration for enhanced drive information
+- **Parallel Processing**: Multi-threaded file operations for performance
+- **JSON Configuration**: Lightweight settings persistence
+
+## ??? Development
+
+### Prerequisites
+- **Visual Studio 2022** (17.8 or later) with:
+  - .NET 9.0 SDK
+  - Windows App SDK workload
+  - C# 13.0 language features
 
 ### Project StructureGameCopier/
-??? Models/                 # Data models (Game, Drive, DeploymentJob)
-??? Services/              # Business logic services
-?   ??? LibraryService.cs  # Game library management
-?   ??? DriveService.cs    # Enhanced USB drive detection
-?   ??? UsbDriveDetectionService.cs # NEW: Real-time WMI monitoring
-?   ??? DeploymentService.cs # Parallel copy engine
-?   ??? LoggingService.cs  # Operation logging
-??? ViewModels/            # MVVM view models
-??? Converters/            # XAML value converters
-??? MainWindow.xaml        # Enhanced main UI
-### Key Components
+??? GameCopier/                 # Main application project
+?   ??? Models/                 # Data models (Game, Drive, DeploymentJob)
+?   ??? Services/               # Business logic services
+?   ??? ViewModels/             # MVVM view models
+?   ??? Views/                  # XAML views and dialogs
+?   ??? MainWindow.xaml         # Main application window
+??? README.md                   # This file
+??? LICENSE                     # MIT license
+??? .gitignore                  # Git ignore rules
+### Building# Debug build
+dotnet build
 
-#### ?? UsbDriveDetectionService
-- Real-time USB drive insertion/removal detection using WMI
-- Windows Management event monitoring for immediate notifications
-- Automatic drive list updates without user intervention
-
-#### Enhanced DriveService
-- WMI-based USB drive identification
-- Proper filtering of actual USB/removable drives vs. internal drives
-- Fallback detection methods for maximum compatibility
-
-#### Improved MainViewModel
-- Event-driven USB detection integration
-- Enhanced status messaging with emoji indicators
-- Smart drive list management with selection preservation
-
-## Real-Time USB Detection
-
-### How It Works
-The application uses Windows Management Instrumentation (WMI) to monitor system events:
-// Monitors USB drive insertions
-Win32_VolumeChangeEvent WHERE EventType = 2
-
-// Monitors USB drive removals  
-Win32_VolumeChangeEvent WHERE EventType = 3
-### Features
-- **Instant Detection**: 1-2 second response time when drives are plugged in
-- **Proper Filtering**: Only shows actual USB/removable drives
-- **Selection Preservation**: Maintains drive selections during auto-refresh
-- **Visual Feedback**: Live indicator and status messages
-- **Fallback Support**: Works even if WMI permissions are limited
-
-## Performance Optimization
-
-### USB Detection Performance
-- **Real-time events**: No polling delays - instant response to USB changes
-- **Efficient filtering**: WMI queries target only relevant drives
-- **Background processing**: Detection doesn't block the UI
-- **Smart updates**: Only refreshes when actual changes occur
-
-### Concurrent Operations
-- Maximum 4 concurrent copy jobs by default (configurable)
-- File-level parallelism within each copy job
-- Optimized 80KB buffer size for file operations
-- Thread pool management for UI responsiveness
-
-## Troubleshooting
-
-### USB Detection Issues
-
-**USB drives not appearing automatically:**
-- Ensure application is running as Administrator
-- Check Windows Event Viewer for WMI access errors
-- Try the "Manual Refresh" button as fallback
-- Verify USB ports are working in Windows Explorer
-
-**Only seeing local hard drives:**
-- This indicates WMI USB detection failed
-- Application falls back to demo mode for testing
-- Restart as Administrator to enable full USB detection
-- Check antivirus software isn't blocking WMI access
-
-**Real-time detection stops working:**
-- Click the settings button (??) to restart monitoring
-- Check if Windows Management service is running
-- Restart the application if issues persist
-
-### Common Issues
-
-**Games not appearing in library**
-- Verify game folders exist in `C:\GameLibrary`
-- Use "Refresh" button to rescan the library
-- Check folder permissions
-
-**Copy operation fails**
-- Ensure sufficient space on target drive
-- Verify drive is not write-protected
-- Check USB connection stability
-
-**Application freezes**
-- All operations are asynchronous - freezing indicates a bug
-- Restart the application
-- Check Windows Event Viewer for errors
-
-## Development
-
-### Building from Sourcegit clone https://github.com/yourorg/GameDeploy.git
-cd GameDeploy
-dotnet restore
+# Release build
 dotnet build --configuration Release
-### Dependencies
-- Microsoft.WindowsAppSDK (1.7.250606001)
-- CommunityToolkit.Mvvm (8.4.0)
-- System.Management (9.0.6) - **NEW for USB detection**
-- Microsoft.Windows.SDK.BuildTools (10.0.26100.4188)
 
-### New Features Added
-- **UsbDriveDetectionService**: Real-time WMI-based USB monitoring
-- **Enhanced DriveService**: Better USB drive identification and filtering
-- **Improved UI**: Live indicators, USB icons, enhanced status messages
-- **BoolToVisibilityConverter**: For conditional UI elements
+# Create deployable package
+dotnet publish --configuration Release --self-contained true
+### Testing# Run unit tests (when available)
+dotnet test
 
-## Deployment Notes
+# Run with detailed logging
+dotnet run --configuration Debug
+## ?? Contributing
 
-### Administrator Privileges
-The application now requires Administrator privileges for full functionality:
-- **With Admin**: Full real-time USB detection via WMI
-- **Without Admin**: Falls back to polling-based detection
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-### Group Policy Considerations
-Some enterprise environments may restrict WMI access:
-- Ensure WMI services are enabled
-- Check Group Policy settings for Management Instrumentation
-- Consider adding application to WMI access whitelist
+### Ways to Contribute
+- ?? **Report Bugs**: Submit detailed bug reports with reproduction steps
+- ?? **Suggest Features**: Propose new functionality or improvements
+- ?? **Improve Documentation**: Help make our docs clearer and more comprehensive
+- ?? **Submit Pull Requests**: Fix bugs or implement new features
 
-## License
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with clear, descriptive commits
+4. Add tests for new functionality
+5. Submit a pull request with a detailed description
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## ?? License
 
-## Support
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-For technical support or feature requests:
-- Create an issue on GitHub
-- Email: support@gamedeploy.com
-- Documentation: https://docs.gamedeploy.com
+## ?? Acknowledgments
+
+- **Microsoft**: For the excellent WinUI 3 framework and Windows App SDK
+- **Community Contributors**: For bug reports, feature suggestions, and code contributions
+- **.NET Foundation**: For the robust .NET ecosystem
+
+## ?? Support
+
+- **Issues**: [GitHub Issues](../../issues)
+- **Discussions**: [GitHub Discussions](../../discussions)
+- **Documentation**: [Wiki](../../wiki)
+
+## ?? Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 
 ---
 
-**GameDeploy Kiosk v1.2** - Now with real-time USB detection for the ultimate retail efficiency!
+**Made with ?? for the gaming community**

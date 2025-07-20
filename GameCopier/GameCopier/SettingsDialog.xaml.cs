@@ -7,6 +7,9 @@ using WinRT.Interop;
 using GameCopier.Services;
 using System.Linq;
 using Windows.Storage;
+using System.Collections.Generic;
+using System.IO;
+using System;
 
 namespace GameCopier
 {
@@ -149,6 +152,9 @@ namespace GameCopier
             systemDriveCheckBox.Unchecked += (s, e) => UpdateDriveSetting(nameof(settings.HideSystemDrive), false);
             _driveSettingsPanel.Children.Add(systemDriveCheckBox);
 
+            // Individual Drive Letter Hiding Section
+            CreateDriveLetterHidingSection();
+
             // Note about USB hard drives
             var note = new TextBlock
             {
@@ -159,6 +165,199 @@ namespace GameCopier
                 TextWrapping = TextWrapping.Wrap
             };
             _driveSettingsPanel.Children.Add(note);
+        }
+
+        private void CreateDriveLetterHidingSection()
+        {
+            var settings = _settingsService.GetSettings();
+
+            // Section header
+            var sectionHeader = new TextBlock
+            {
+                Text = "Hide Specific Drive Letters:",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                FontSize = 14,
+                Margin = new Thickness(0,16,0,8)
+            };
+            _driveSettingsPanel.Children.Add(sectionHeader);
+
+            var description = new TextBlock
+            {
+                Text = "Select individual drive letters to hide from the main drive list:",
+                FontStyle = Windows.UI.Text.FontStyle.Italic,
+                Margin = new Thickness(0,0,0,8),
+                TextWrapping = TextWrapping.Wrap
+            };
+            _driveSettingsPanel.Children.Add(description);
+
+            // Get all available drives on the system
+            var availableDrives = GetAllSystemDrives();
+            
+            if (availableDrives.Any())
+            {
+                // Create a grid for drive checkboxes (3 columns)
+                var driveGrid = new Grid();
+                driveGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                driveGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                driveGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                int row = 0;
+                int col = 0;
+
+                foreach (var driveInfo in availableDrives)
+                {
+                    var driveLetter = driveInfo.Name.TrimEnd('\\');
+                    var isHidden = settings.HiddenDriveLetters.Contains(driveLetter);
+                    
+                    // Create drive display info
+                    var driveLabel = driveInfo.VolumeLabel;
+                    var driveSize = "";
+                    try
+                    {
+                        var sizeGB = Math.Round(driveInfo.TotalSize / (1024.0 * 1024.0 * 1024.0), 1);
+                        driveSize = $" ({sizeGB}GB)";
+                    }
+                    catch { }
+
+                    var displayText = string.IsNullOrEmpty(driveLabel) 
+                        ? $"{driveLetter} [{driveInfo.DriveType}]{driveSize}" 
+                        : $"{driveLetter} - {driveLabel}{driveSize}";
+
+                    var checkBox = new CheckBox
+                    {
+                        Content = displayText,
+                        IsChecked = isHidden,
+                        Margin = new Thickness(0,0,8,8),
+                        FontSize = 12
+                    };
+
+                    // Add row if needed
+                    if (driveGrid.RowDefinitions.Count <= row)
+                    {
+                        driveGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    }
+
+                    Grid.SetRow(checkBox, row);
+                    Grid.SetColumn(checkBox, col);
+                    driveGrid.Children.Add(checkBox);
+
+                    // Handle checkbox changes
+                    var currentDriveLetter = driveLetter; // Capture for closure
+                    checkBox.Checked += (s, e) => ToggleDriveLetterVisibility(currentDriveLetter, true);
+                    checkBox.Unchecked += (s, e) => ToggleDriveLetterVisibility(currentDriveLetter, false);
+
+                    // Move to next position
+                    col++;
+                    if (col >= 3)
+                    {
+                        col = 0;
+                        row++;
+                    }
+                }
+
+                _driveSettingsPanel.Children.Add(driveGrid);
+            }
+            else
+            {
+                var noDrivesText = new TextBlock
+                {
+                    Text = "No drives detected on the system.",
+                    FontStyle = Windows.UI.Text.FontStyle.Italic,
+                    Margin = new Thickness(0,0,0,8)
+                };
+                _driveSettingsPanel.Children.Add(noDrivesText);
+            }
+
+            // Quick action buttons
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0,8,0,0),
+                Spacing = 8
+            };
+
+            var showAllButton = new Button
+            {
+                Content = "Show All Drives",
+                FontSize = 12,
+                Padding = new Thickness(12,6,12,6)
+            };
+            showAllButton.Click += (s, e) => ClearAllHiddenDrives();
+
+            var hideAllButton = new Button
+            {
+                Content = "Hide All Non-System",
+                FontSize = 12,
+                Padding = new Thickness(12,6,12,6)
+            };
+            hideAllButton.Click += (s, e) => HideAllNonSystemDrives();
+
+            buttonPanel.Children.Add(showAllButton);
+            buttonPanel.Children.Add(hideAllButton);
+            _driveSettingsPanel.Children.Add(buttonPanel);
+        }
+
+        private List<DriveInfo> GetAllSystemDrives()
+        {
+            try
+            {
+                return DriveInfo.GetDrives()
+                    .Where(d => d.IsReady)
+                    .OrderBy(d => d.Name)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting system drives: {ex.Message}");
+                return new List<DriveInfo>();
+            }
+        }
+
+        private void ToggleDriveLetterVisibility(string driveLetter, bool hide)
+        {
+            var settings = _settingsService.GetSettings();
+            
+            if (hide && !settings.HiddenDriveLetters.Contains(driveLetter))
+            {
+                settings.HiddenDriveLetters.Add(driveLetter);
+                System.Diagnostics.Debug.WriteLine($"?? Hidden drive letter: {driveLetter}");
+            }
+            else if (!hide && settings.HiddenDriveLetters.Contains(driveLetter))
+            {
+                settings.HiddenDriveLetters.Remove(driveLetter);
+                System.Diagnostics.Debug.WriteLine($"?? Unhidden drive letter: {driveLetter}");
+            }
+            
+            _settingsService.SaveSettings(settings);
+        }
+
+        private void ClearAllHiddenDrives()
+        {
+            var settings = _settingsService.GetSettings();
+            settings.HiddenDriveLetters.Clear();
+            _settingsService.SaveSettings(settings);
+            RefreshDriveSettingsPanel(); // Refresh to update checkboxes
+            System.Diagnostics.Debug.WriteLine("?? Cleared all hidden drive letters");
+        }
+
+        private void HideAllNonSystemDrives()
+        {
+            var settings = _settingsService.GetSettings();
+            var allDrives = GetAllSystemDrives();
+            
+            settings.HiddenDriveLetters.Clear();
+            foreach (var drive in allDrives)
+            {
+                var driveLetter = drive.Name.TrimEnd('\\');
+                if (!driveLetter.ToUpper().StartsWith("C"))
+                {
+                    settings.HiddenDriveLetters.Add(driveLetter);
+                }
+            }
+            
+            _settingsService.SaveSettings(settings);
+            RefreshDriveSettingsPanel(); // Refresh to update checkboxes
+            System.Diagnostics.Debug.WriteLine($"?? Hidden all non-system drives: {string.Join(", ", settings.HiddenDriveLetters)}");
         }
 
         private void UpdateDriveSetting(string propertyName, bool value)
