@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <!-- Preserve all types in System.Text.Json for proper JSON serialization -->
+  <assembly fullname="System.Text.Json" preserve="all" />
+  
+  <!-- Preserve JSON-related types in our assembly -->
+  <assembly fullname="GameCopier">
+    <type fullname="GameCopier.Services.DriveDisplaySettings" preserve="all" />
+    <type fullname="GameCopier.Services.SettingsJsonContext" preserve="all" />
+    <type fullname="GameCopier.Services.LibraryJsonContext" preserve="all" />
+  </assembly>
+  
+  <!-- Preserve reflection-based file operations -->
+  <assembly fullname="System.IO.FileSystem" preserve="all" />
+</linker>

@@ -21,12 +21,15 @@ namespace GameCopier
         private ObservableCollection<string> _softwareFolders;
         private StackPanel _foldersPanel = new();
         private StackPanel _driveSettingsPanel = new();
+        private StackPanel _gamesFoldersPanel;
+        private StackPanel _softwareFoldersPanel;
 
         public SettingsDialog()
         {
             this.XamlRoot = App.MainWindow?.Content?.XamlRoot;
             this.Title = "Settings";
             this.PrimaryButtonText = "Close";
+            this.PrimaryButtonClick += SettingsDialog_PrimaryButtonClick;
             
             _libraryService = new LibraryService();
             _settingsService = new SettingsService();
@@ -58,7 +61,6 @@ namespace GameCopier
         private StackPanel CreateLibrarySection()
         {
             var section = new StackPanel();
-            
             var header = new TextBlock 
             { 
                 Text = "Library Folders:", 
@@ -73,41 +75,36 @@ namespace GameCopier
             
             // Games Tab
             var gamesTab = new TabViewItem { Header = "Game Folders" };
-            var gamesFoldersPanel = new StackPanel();
-            RefreshGameFoldersPanel(gamesFoldersPanel);
-            
+            _gamesFoldersPanel = new StackPanel();
+            RefreshGameFoldersPanel(_gamesFoldersPanel);
             var addGameButton = new Button 
             { 
                 Content = "Add Game Folder", 
                 Margin = new Thickness(0,8,0,0) 
             };
             addGameButton.Click += async (s, e) => await AddGameFolderAsync();
-            
             var gamesContent = new StackPanel();
-            gamesContent.Children.Add(gamesFoldersPanel);
+            gamesContent.Children.Add(_gamesFoldersPanel);
             gamesContent.Children.Add(addGameButton);
             gamesTab.Content = gamesContent;
             
             // Software Tab
             var softwareTab = new TabViewItem { Header = "Software Folders" };
-            var softwareFoldersPanel = new StackPanel();
-            RefreshSoftwareFoldersPanel(softwareFoldersPanel);
-            
+            _softwareFoldersPanel = new StackPanel();
+            RefreshSoftwareFoldersPanel(_softwareFoldersPanel);
             var addSoftwareButton = new Button 
             { 
                 Content = "Add Software Folder", 
                 Margin = new Thickness(0,8,0,0) 
             };
             addSoftwareButton.Click += async (s, e) => await AddSoftwareFolderAsync();
-            
             var softwareContent = new StackPanel();
-            softwareContent.Children.Add(softwareFoldersPanel);
+            softwareContent.Children.Add(_softwareFoldersPanel);
             softwareContent.Children.Add(addSoftwareButton);
             softwareTab.Content = softwareContent;
             
             tabView.TabItems.Add(gamesTab);
             tabView.TabItems.Add(softwareTab);
-            
             section.Children.Add(tabView);
             return section;
         }
@@ -515,7 +512,7 @@ namespace GameCopier
                     {
                         await _libraryService.AddGameFolderAsync(folderPath);
                         _gameFolders.Add(folderPath);
-                        // Need to refresh the panel - this would require storing a reference to it
+                        RefreshGameFoldersPanel(_gamesFoldersPanel); // Refresh after add
                     }
                 }
             }
@@ -571,7 +568,7 @@ namespace GameCopier
                     {
                         await _libraryService.AddSoftwareFolderAsync(folderPath);
                         _softwareFolders.Add(folderPath);
-                        // Need to refresh the panel - this would require storing a reference to it
+                        RefreshSoftwareFoldersPanel(_softwareFoldersPanel); // Refresh after add
                     }
                 }
             }
@@ -607,6 +604,43 @@ namespace GameCopier
             {
                 System.Diagnostics.Debug.WriteLine($"Error removing software folder: {ex.Message}");
             }
+        }
+
+        private void SettingsDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+        {
+            // Save folders
+            _libraryService.SaveGameFolders(_gameFolders.ToList());
+            _libraryService.SaveSoftwareFolders(_softwareFolders.ToList());
+
+            // Save drive display settings from UI
+            var settings = _settingsService.GetSettings();
+            int driveTypeIndex = 0;
+            var driveTypeProperties = new[]
+            {
+                nameof(settings.ShowRemovableDrives),
+                nameof(settings.ShowFixedDrives),
+                nameof(settings.ShowNetworkDrives),
+                nameof(settings.ShowCdRomDrives),
+                nameof(settings.ShowRamDrives),
+                nameof(settings.ShowUnknownDrives)
+            };
+            // First 6 checkboxes are drive types
+            foreach (var child in _driveSettingsPanel.Children)
+            {
+                if (child is CheckBox cb && driveTypeIndex < driveTypeProperties.Length)
+                {
+                    typeof(DriveDisplaySettings).GetProperty(driveTypeProperties[driveTypeIndex])?.SetValue(settings, cb.IsChecked == true);
+                    driveTypeIndex++;
+                }
+            }
+            // 7th checkbox is HideSystemDrive
+            var systemDriveCheckBox = _driveSettingsPanel.Children.OfType<CheckBox>().Skip(6).FirstOrDefault();
+            if (systemDriveCheckBox != null)
+            {
+                settings.HideSystemDrive = systemDriveCheckBox.IsChecked == true;
+            }
+            // Save settings
+            _settingsService.SaveSettings(settings);
         }
     }
 }

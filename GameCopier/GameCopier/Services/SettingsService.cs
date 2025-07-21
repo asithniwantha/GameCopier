@@ -1,10 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace GameCopier.Services
 {
+    [JsonSerializable(typeof(DriveDisplaySettings))]
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    internal partial class SettingsJsonContext : JsonSerializerContext
+    {
+    }
+
     public class SettingsService
     {
         private readonly string _configFilePath;
@@ -19,6 +28,7 @@ namespace GameCopier.Services
             var configFolder = Path.Combine(appDataPath, "GameCopier");
             Directory.CreateDirectory(configFolder);
             _configFilePath = Path.Combine(configFolder, "drivesettings.json");
+            LogMessage($"Config file path: {_configFilePath}");
             _settings = LoadSettings();
         }
 
@@ -29,16 +39,18 @@ namespace GameCopier.Services
             _settings = settings;
             try
             {
-                var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(_settings, SettingsJsonContext.Default.DriveDisplaySettings);
                 File.WriteAllText(_configFilePath, json);
-                System.Diagnostics.Debug.WriteLine($"? Drive settings saved: {json}");
+                LogMessage($"Drive settings saved to: {_configFilePath}");
+                LogMessage($"Drive settings saved: {json}");
                 
                 // Notify subscribers that settings have changed
                 SettingsChanged?.Invoke(this, _settings);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? Error saving drive settings: {ex.Message}");
+                LogError($"Error saving drive settings: {ex.Message}");
+                LogError($"Exception details: {ex}");
             }
         }
 
@@ -50,22 +62,43 @@ namespace GameCopier.Services
                 {
                     var defaultSettings = new DriveDisplaySettings();
                     SaveSettings(defaultSettings);
+                    LogMessage($"No config file, created default at: {_configFilePath}");
                     return defaultSettings;
                 }
 
                 var json = File.ReadAllText(_configFilePath);
-                var settings = JsonSerializer.Deserialize<DriveDisplaySettings>(json);
-                System.Diagnostics.Debug.WriteLine($"? Drive settings loaded: {json}");
+                var settings = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.DriveDisplaySettings);
+                LogMessage($"Drive settings loaded from: {_configFilePath}");
+                LogMessage($"Drive settings loaded: {json}");
                 return settings ?? new DriveDisplaySettings();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? Error loading drive settings: {ex.Message}");
+                LogError($"Error loading drive settings: {ex.Message}");
+                LogError($"Exception details: {ex}");
                 return new DriveDisplaySettings();
             }
         }
+
+        [Conditional("DEBUG")]
+        private static void LogMessage(string message)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] {message}");
+        }
+
+        private static void LogError(string message)
+        {
+            // Always log errors, even in release builds
+            System.Diagnostics.Debug.WriteLine($"[SettingsService] {message}");
+#if !DEBUG
+            // In release builds, also write to console/trace for visibility
+            Console.WriteLine($"[SettingsService] {message}");
+            Trace.WriteLine($"[SettingsService] {message}");
+#endif
+        }
     }
 
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)]
     public class DriveDisplaySettings
     {
         public bool ShowRemovableDrives { get; set; } = true;

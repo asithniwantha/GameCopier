@@ -1,13 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using GameCopier.Models;
 
 namespace GameCopier.Services
 {
+    [JsonSerializable(typeof(List<string>))]
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    internal partial class LibraryJsonContext : JsonSerializerContext
+    {
+    }
+
     public class LibraryService
     {
         private List<string> _gameFolders;
@@ -24,6 +32,8 @@ namespace GameCopier.Services
             Directory.CreateDirectory(configFolder);
             _gameConfigFilePath = Path.Combine(configFolder, "gamefolders.json");
             _softwareConfigFilePath = Path.Combine(configFolder, "softwarefolders.json");
+            System.Diagnostics.Debug.WriteLine($"[LibraryService] Game config file path: {_gameConfigFilePath}");
+            System.Diagnostics.Debug.WriteLine($"[LibraryService] Software config file path: {_softwareConfigFilePath}");
             _gameFolders = LoadGameFolders();
             _softwareFolders = LoadSoftwareFolders();
         }
@@ -38,28 +48,35 @@ namespace GameCopier.Services
                     // Default folder if config doesn't exist
                     var defaultFolders = new List<string> { "C:\\GameLibrary" };
                     SaveGameFolders(defaultFolders);
+                    System.Diagnostics.Debug.WriteLine($"[LibraryService] No game config file, created default at: {_gameConfigFilePath}");
                     return defaultFolders;
                 }
                 var json = File.ReadAllText(_gameConfigFilePath);
-                return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Game folders loaded from: {_gameConfigFilePath}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Game folders loaded: {json}");
+                return JsonSerializer.Deserialize(json, LibraryJsonContext.Default.ListString) ?? new List<string>();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading game folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Error loading game folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Exception details: {ex}");
                 return new List<string>();
             }
         }
 
-        private void SaveGameFolders(List<string> folders)
+        public void SaveGameFolders(List<string> folders)
         {
             try
             {
-                var json = JsonSerializer.Serialize(folders, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(folders, LibraryJsonContext.Default.ListString);
                 File.WriteAllText(_gameConfigFilePath, json);
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Game folders saved to: {_gameConfigFilePath}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Game folders saved: {json}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving game folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Error saving game folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Exception details: {ex}");
             }
         }
 
@@ -155,28 +172,35 @@ namespace GameCopier.Services
                     // Default folder if config doesn't exist
                     var defaultFolders = new List<string> { "C:\\SoftwareLibrary" };
                     SaveSoftwareFolders(defaultFolders);
+                    System.Diagnostics.Debug.WriteLine($"[LibraryService] No software config file, created default at: {_softwareConfigFilePath}");
                     return defaultFolders;
                 }
                 var json = File.ReadAllText(_softwareConfigFilePath);
-                return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Software folders loaded from: {_softwareConfigFilePath}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Software folders loaded: {json}");
+                return JsonSerializer.Deserialize(json, LibraryJsonContext.Default.ListString) ?? new List<string>();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading software folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Error loading software folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Exception details: {ex}");
                 return new List<string>();
             }
         }
 
-        private void SaveSoftwareFolders(List<string> folders)
+        public void SaveSoftwareFolders(List<string> folders)
         {
             try
             {
-                var json = JsonSerializer.Serialize(folders, new JsonSerializerOptions { WriteIndented = true });
+                var json = JsonSerializer.Serialize(folders, LibraryJsonContext.Default.ListString);
                 File.WriteAllText(_softwareConfigFilePath, json);
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Software folders saved to: {_softwareConfigFilePath}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Software folders saved: {json}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error saving software folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Error saving software folders: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LibraryService] Exception details: {ex}");
             }
         }
 
