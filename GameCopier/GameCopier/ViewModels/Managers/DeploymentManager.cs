@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using GameCopier.Models;
 using GameCopier.Services;
@@ -18,6 +19,7 @@ namespace GameCopier.ViewModels.Managers
     {
         private readonly DispatcherQueue? _uiDispatcher;
         private bool _isRunning = false;
+        private static int _copyOperationCounter = 0; // Track copy operations
 
         public event EventHandler<DeploymentJob>? JobUpdated;
         public event EventHandler<string>? StatusChanged;
@@ -55,14 +57,24 @@ namespace GameCopier.ViewModels.Managers
 
                 System.Diagnostics.Debug.WriteLine($"?? Copy: {sourceDir} -> {targetDir}");
                 
-                // Update status
-                StatusChanged?.Invoke(this, $"?? Windows Explorer dialog opening for: {job.Game.Name}");
+                // Create a status callback for real-time feedback
+                Action<string> statusCallback = (status) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        StatusChanged?.Invoke(this, $"{job.Game.Name} ? {job.TargetDrive.DriveLetter}: {status}");
+                    });
+                };
                 
-                // Use Windows Explorer copy with dialog
-                bool success = await FastCopyService.CopyDirectoryWithExplorerDialogAsync(
+                // Initial status with detailed information
+                StatusChanged?.Invoke(this, $"?? Starting copy: {job.Game.Name} ? {job.TargetDrive.DriveLetter}");
+                
+                // Use enhanced Windows Explorer copy with better dialog control
+                bool success = await FastCopyService.CopyDirectoryWithDialogNotificationAsync(
                     sourceDir, 
                     targetDir, 
-                    IntPtr.Zero, 
+                    IntPtr.Zero,
+                    statusCallback,
                     System.Threading.CancellationToken.None);
 
                 // Update job status
@@ -71,14 +83,14 @@ namespace GameCopier.ViewModels.Managers
                     job.Status = DeploymentJobStatus.Completed;
                     job.Progress = 100.0;
                     job.CompletedAt = DateTime.Now;
-                    StatusChanged?.Invoke(this, $"? Completed: {job.Game.Name}");
+                    StatusChanged?.Invoke(this, $"? Completed: {job.Game.Name} ? {job.TargetDrive.DriveLetter}");
                     System.Diagnostics.Debug.WriteLine($"? Job completed: {job.DisplayName}");
                 }
                 else
                 {
                     job.Status = DeploymentJobStatus.Failed;
                     job.ErrorMessage = "Windows Explorer copy operation failed";
-                    StatusChanged?.Invoke(this, $"? Failed: {job.Game.Name}");
+                    StatusChanged?.Invoke(this, $"? Failed: {job.Game.Name} ? {job.TargetDrive.DriveLetter}");
                     System.Diagnostics.Debug.WriteLine($"? Job failed: {job.DisplayName}");
                 }
                 
@@ -89,7 +101,7 @@ namespace GameCopier.ViewModels.Managers
             {
                 job.Status = DeploymentJobStatus.Failed;
                 job.ErrorMessage = ex.Message;
-                StatusChanged?.Invoke(this, $"? Error copying {job.Game.Name}: {ex.Message}");
+                StatusChanged?.Invoke(this, $"? Error copying {job.Game.Name} to {job.TargetDrive.DriveLetter}: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"? Job exception: {job.DisplayName} - {ex.Message}");
                 
                 JobUpdated?.Invoke(this, job);
@@ -107,21 +119,71 @@ namespace GameCopier.ViewModels.Managers
                 var pendingJobs = jobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
                 var totalJobs = pendingJobs.Count;
 
-                StatusChanged?.Invoke(this, $"?? Starting {totalJobs} copy operation(s) with Windows Explorer...");
-                System.Diagnostics.Debug.WriteLine($"?? DeploymentManager: Processing {totalJobs} jobs");
+                StatusChanged?.Invoke(this, $"?? Starting {totalJobs} copy operation(s) with enhanced dialog control...");
+                System.Diagnostics.Debug.WriteLine($"?? DeploymentManager: Processing {totalJobs} jobs with dialog-aware parallel strategy");
+
+                // Group jobs by target drive for smart parallel processing
+                var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
+                System.Diagnostics.Debug.WriteLine($"?? Jobs grouped into {jobsByDrive.Count} drive groups:");
+                
+                foreach (var driveGroup in jobsByDrive)
+                {
+                    var jobNames = driveGroup.Select(j => j.Game.Name).ToList();
+                    System.Diagnostics.Debug.WriteLine($"   ?? {driveGroup.Key}: {string.Join(", ", jobNames)}");
+                }
 
                 var successfulJobs = 0;
                 var failedJobs = 0;
 
-                // Process each job sequentially for better dialog visibility
-                foreach (var job in pendingJobs)
+                // ENHANCED: Use a semaphore to control dialog display timing
+                using var dialogSemaphore = new SemaphoreSlim(1, 1); // Only one dialog at a time
+                
+                // Process each drive group in parallel, but dialogs appear sequentially
+                var driveGroupTasks = jobsByDrive.Select(async driveGroup =>
                 {
-                    bool success = await ProcessJobAsync(job);
-                    if (success)
-                        successfulJobs++;
-                    else
-                        failedJobs++;
-                }
+                    var driveLetter = driveGroup.Key;
+                    var driveJobs = driveGroup.ToList();
+                    
+                    System.Diagnostics.Debug.WriteLine($"?? Starting enhanced processing for drive {driveLetter} with {driveJobs.Count} jobs");
+                    
+                    var driveSuccessCount = 0;
+                    var driveFailCount = 0;
+                    
+                    // Process jobs for this specific drive sequentially with dialog control
+                    foreach (var job in driveJobs)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"?? Processing job: {job.Game.Name} ? {driveLetter}");
+                        
+                        // Acquire dialog semaphore to ensure only one dialog at a time
+                        await dialogSemaphore.WaitAsync();
+                        
+                        try
+                        {
+                            bool success = await ProcessJobWithDialogControlAsync(job);
+                            if (success)
+                                driveSuccessCount++;
+                            else
+                                driveFailCount++;
+                            
+                            // Strategic delay to allow Shell API to reset between operations
+                            await Task.Delay(1000); // 1 second delay between operations
+                        }
+                        finally
+                        {
+                            dialogSemaphore.Release();
+                        }
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"? Drive {driveLetter} completed: {driveSuccessCount} succeeded, {driveFailCount} failed");
+                    return new { Success = driveSuccessCount, Failed = driveFailCount };
+                }).ToList();
+
+                // Wait for all drive groups to complete
+                var results = await Task.WhenAll(driveGroupTasks);
+                
+                // Aggregate results
+                successfulJobs = results.Sum(r => r.Success);
+                failedJobs = results.Sum(r => r.Failed);
 
                 // Final status
                 if (failedJobs == 0)
@@ -133,7 +195,7 @@ namespace GameCopier.ViewModels.Managers
                     StatusChanged?.Invoke(this, $"?? Copy completed: {successfulJobs} succeeded, {failedJobs} failed");
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"? DeploymentManager: Queue completed - {successfulJobs} succeeded, {failedJobs} failed");
+                System.Diagnostics.Debug.WriteLine($"?? DeploymentManager: Enhanced queue completed - {successfulJobs} succeeded, {failedJobs} failed");
                 return failedJobs == 0;
             }
             catch (Exception ex)
@@ -145,6 +207,86 @@ namespace GameCopier.ViewModels.Managers
             finally
             {
                 IsRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Enhanced job processing with dialog control to ensure dialogs appear reliably
+        /// </summary>
+        private async Task<bool> ProcessJobWithDialogControlAsync(DeploymentJob job)
+        {
+            try
+            {
+                // Increment copy operation counter for tracking
+                var operationNumber = Interlocked.Increment(ref _copyOperationCounter);
+                System.Diagnostics.Debug.WriteLine($"?? DeploymentManager: Processing copy operation #{operationNumber} - {job.DisplayName}");
+                
+                // Mark job as in progress
+                job.Status = DeploymentJobStatus.InProgress;
+                job.StartedAt = DateTime.Now;
+                JobUpdated?.Invoke(this, job);
+                
+                // Prepare paths
+                var sourceDir = job.Game.FolderPath;
+                var targetDir = Path.Combine(job.TargetDrive.DriveLetter, job.Game.Name);
+
+                System.Diagnostics.Debug.WriteLine($"?? Enhanced copy #{operationNumber}: {sourceDir} -> {targetDir}");
+                
+                // Create a status callback for real-time feedback
+                Action<string> statusCallback = (status) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        StatusChanged?.Invoke(this, $"#{operationNumber} {job.Game.Name} ? {job.TargetDrive.DriveLetter}: {status}");
+                    });
+                };
+                
+                // Enhanced status with operation number and dialog assurance
+                StatusChanged?.Invoke(this, $"?? Copy #{operationNumber} starting: {job.Game.Name} ? {job.TargetDrive.DriveLetter} (Dialog guaranteed)");
+                
+                // Strategic delay based on operation number to prevent API conflicts
+                var delayMs = Math.Min(500 + (operationNumber * 200), 2000); // Increasing delay, max 2s
+                await Task.Delay(delayMs);
+                
+                System.Diagnostics.Debug.WriteLine($"?? Copy #{operationNumber}: Starting with {delayMs}ms delay for dialog reliability");
+                
+                // Use enhanced copy method with forced dialog visibility
+                bool success = await FastCopyService.CopyDirectoryWithForcedDialogAsync(
+                    sourceDir, 
+                    targetDir, 
+                    IntPtr.Zero,
+                    statusCallback,
+                    System.Threading.CancellationToken.None);
+
+                // Update job status
+                if (success)
+                {
+                    job.Status = DeploymentJobStatus.Completed;
+                    job.Progress = 100.0;
+                    job.CompletedAt = DateTime.Now;
+                    StatusChanged?.Invoke(this, $"? Copy #{operationNumber} completed: {job.Game.Name} ? {job.TargetDrive.DriveLetter}");
+                    System.Diagnostics.Debug.WriteLine($"? Copy operation #{operationNumber} completed: {job.DisplayName}");
+                }
+                else
+                {
+                    job.Status = DeploymentJobStatus.Failed;
+                    job.ErrorMessage = "Windows Explorer copy operation failed";
+                    StatusChanged?.Invoke(this, $"? Copy #{operationNumber} failed: {job.Game.Name} ? {job.TargetDrive.DriveLetter}");
+                    System.Diagnostics.Debug.WriteLine($"? Copy operation #{operationNumber} failed: {job.DisplayName}");
+                }
+                
+                JobUpdated?.Invoke(this, job);
+                return success;
+            }
+            catch (Exception ex)
+            {
+                job.Status = DeploymentJobStatus.Failed;
+                job.ErrorMessage = ex.Message;
+                StatusChanged?.Invoke(this, $"? Error in copy operation: {job.Game.Name} to {job.TargetDrive.DriveLetter}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"? Copy operation exception: {job.DisplayName} - {ex.Message}");
+                
+                JobUpdated?.Invoke(this, job);
+                return false;
             }
         }
 

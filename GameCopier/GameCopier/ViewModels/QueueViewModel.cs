@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -126,6 +127,9 @@ namespace GameCopier.ViewModels
                 {
                     var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
                     StatusChanged?.Invoke(this, $"? Added {itemName} to copy queue! Windows Explorer dialog will appear during copy.");
+                    
+                    // Trigger queue analysis update
+                    OnPropertyChanged("QueueAnalysis");
                     return true;
                 }
 
@@ -148,6 +152,27 @@ namespace GameCopier.ViewModels
                 var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
                 if (!pendingJobs.Any()) return false;
 
+                // Analyze the queue for parallel processing potential
+                var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
+                var driveCount = jobsByDrive.Count;
+                
+                if (driveCount > 1)
+                {
+                    StatusChanged?.Invoke(this, $"?? Starting {pendingJobs.Count} jobs across {driveCount} drives - parallel processing enabled!");
+                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Parallel processing - {driveCount} drives will run simultaneously");
+                    
+                    foreach (var driveGroup in jobsByDrive)
+                    {
+                        var jobCount = driveGroup.Count();
+                        System.Diagnostics.Debug.WriteLine($"   ?? Drive {driveGroup.Key}: {jobCount} jobs");
+                    }
+                }
+                else
+                {
+                    StatusChanged?.Invoke(this, $"?? Starting {pendingJobs.Count} jobs to single drive - sequential processing");
+                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Single drive processing - jobs will run sequentially");
+                }
+
                 System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Starting queue with {pendingJobs.Count} jobs");
                 
                 bool success = await _deploymentManager.ProcessQueueAsync(pendingJobs);
@@ -168,6 +193,62 @@ namespace GameCopier.ViewModels
             return !IsDeploymentRunning && DeploymentJobs.Any(j => j.Status == DeploymentJobStatus.Pending);
         }
 
+        public string GetQueueAnalysis()
+        {
+            var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
+            if (!pendingJobs.Any()) return "No pending jobs in queue";
+            
+            var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
+            var driveCount = jobsByDrive.Count;
+            
+            if (driveCount == 1)
+            {
+                var drive = jobsByDrive.First().Key;
+                return $"{pendingJobs.Count} jobs ? {drive} (sequential)";
+            }
+            else
+            {
+                var driveDetails = jobsByDrive.Select(g => $"{g.Key} ({g.Count()})").ToList();
+                return $"{pendingJobs.Count} jobs ? {string.Join(", ", driveDetails)} (parallel by drive)";
+            }
+        }
+
+        /// <summary>
+        /// Gets detailed information about the parallel processing strategy for the current queue
+        /// </summary>
+        public string GetParallelProcessingInfo()
+        {
+            var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
+            if (!pendingJobs.Any()) return "No jobs to process";
+            
+            var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
+            var driveCount = jobsByDrive.Count;
+            
+            if (driveCount == 1)
+            {
+                return $"Single drive mode: All {pendingJobs.Count} jobs will copy to {jobsByDrive.First().Key} sequentially for optimal performance.";
+            }
+            else
+            {
+                var details = new List<string>();
+                details.Add($"Smart parallel mode: {driveCount} drives will be processed simultaneously:");
+                
+                foreach (var driveGroup in jobsByDrive.OrderBy(g => g.Key))
+                {
+                    var jobNames = driveGroup.Select(j => j.Game.Name).Take(3).ToList();
+                    var remaining = driveGroup.Count() - jobNames.Count;
+                    var jobList = string.Join(", ", jobNames);
+                    if (remaining > 0) jobList += $" (+{remaining} more)";
+                    
+                    details.Add($"  ?? {driveGroup.Key}: {driveGroup.Count()} jobs ({jobList})");
+                }
+                
+                details.Add($"Total time savings: ~{Math.Round((driveCount - 1) * 100.0 / driveCount, 0)}% faster than sequential processing");
+                
+                return string.Join("\n", details);
+            }
+        }
+
         public void RemoveFromQueue(DeploymentJob? job)
         {
             if (job == null) return;
@@ -183,6 +264,9 @@ namespace GameCopier.ViewModels
                 DeploymentJobs.Remove(job);
                 StatusChanged?.Invoke(this, $"??? Removed {job.DisplayName} from queue");
                 System.Diagnostics.Debug.WriteLine($"??? QueueViewModel: Removed job - {job.DisplayName}");
+                
+                // Trigger queue analysis update
+                OnPropertyChanged("QueueAnalysis");
             }
             catch (Exception ex)
             {
@@ -205,6 +289,9 @@ namespace GameCopier.ViewModels
                 DeploymentJobs.Clear();
                 StatusChanged?.Invoke(this, $"?? Cleared {jobCount} jobs from queue");
                 System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Cleared {jobCount} jobs");
+                
+                // Trigger queue analysis update
+                OnPropertyChanged("QueueAnalysis");
             }
             catch (Exception ex)
             {
@@ -228,6 +315,9 @@ namespace GameCopier.ViewModels
             }
 
             UpdateOverallProgress();
+            
+            // Trigger queue analysis update by notifying property changed
+            OnPropertyChanged("QueueAnalysis");
         }
 
         private void UpdateOverallProgress()

@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows.Input;
@@ -32,7 +33,7 @@ namespace GameCopier.ViewModels
         
         // UI Threading
         private readonly DispatcherQueue? _uiDispatcher;
-        private readonly Timer _driveMonitorTimer;
+        private readonly System.Timers.Timer _driveMonitorTimer;
 
         // Properties
         private string _searchText = string.Empty;
@@ -89,6 +90,7 @@ namespace GameCopier.ViewModels
         public ObservableCollection<DeploymentJob> DeploymentJobs => _queueViewModel.DeploymentJobs;
         public double OverallProgress => _queueViewModel.OverallProgress;
         public bool IsDeploymentRunning => _queueViewModel.IsDeploymentRunning;
+        public string QueueAnalysis => _queueViewModel.GetQueueAnalysis();
 
         // Search result properties
         public string GameSearchResultsText
@@ -121,6 +123,8 @@ namespace GameCopier.ViewModels
         public ICommand LoadDrivesCommand { get; }
         public ICommand RefreshDrivesCommand { get; } // Add manual refresh command
         public ICommand ForceShowDrivesCommand { get; } // Force show drives for testing
+        public ICommand TestCopyDialogCommand { get; } // Test copy dialog visibility
+        public ICommand TestSequentialDialogsCommand { get; } // Test multiple dialogs
         public ICommand ShowSettingsCommand { get; }
         public ICommand AddGameFolderCommand { get; }
         public ICommand AddSoftwareFolderCommand { get; }
@@ -179,6 +183,8 @@ namespace GameCopier.ViewModels
             LoadDrivesCommand = new RelayCommand(async () => await LoadDrivesAsync());
             RefreshDrivesCommand = new RelayCommand(async () => await RefreshDrivesManuallyAsync());
             ForceShowDrivesCommand = new RelayCommand(async () => await ForceShowDrivesAsync());
+            TestCopyDialogCommand = new RelayCommand(async () => await TestCopyDialogAsync());
+            TestSequentialDialogsCommand = new RelayCommand(async () => await TestSequentialDialogsAsync());
             ShowSettingsCommand = new RelayCommand(ShowSettings);
             AddGameFolderCommand = new RelayCommand(async () => await AddGameFolderAsync());
             AddSoftwareFolderCommand = new RelayCommand(async () => await AddSoftwareFolderAsync());
@@ -194,7 +200,7 @@ namespace GameCopier.ViewModels
             StartQueueCommand = new RelayCommand(async () => await StartQueueAsync(), () => _queueViewModel.CanStartQueue());
 
             // Backup timer for drive monitoring
-            _driveMonitorTimer = new Timer(30000); // 30 seconds
+            _driveMonitorTimer = new System.Timers.Timer(30000); // 30 seconds
             _driveMonitorTimer.Elapsed += OnDriveMonitorTimer;
             _driveMonitorTimer.AutoReset = true;
 
@@ -359,6 +365,162 @@ namespace GameCopier.ViewModels
             }
         }
 
+        private async Task TestCopyDialogAsync()
+        {
+            try
+            {
+                StatusText = "?? Testing Windows copy dialog visibility...";
+                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Testing copy dialog");
+                
+                // Create a temporary test setup
+                var tempSource = Path.Combine(Path.GetTempPath(), "GameCopierTest");
+                var tempTarget = Path.Combine(Path.GetTempPath(), "GameCopierTestTarget");
+                
+                // Create test source directory with a small file
+                Directory.CreateDirectory(tempSource);
+                var testFilePath = Path.Combine(tempSource, "test.txt");
+                await File.WriteAllTextAsync(testFilePath, "This is a test file for copy dialog testing.");
+                
+                StatusText = "?? Test file created, attempting copy with dialog...";
+                
+                // Create status callback for real-time feedback
+                Action<string> statusCallback = (status) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        StatusText = $"?? Copy Dialog Test: {status}";
+                    });
+                };
+                
+                // Test the enhanced copy dialog
+                bool success = await Services.FastCopyService.CopyDirectoryWithDialogNotificationAsync(
+                    tempSource,
+                    tempTarget,
+                    IntPtr.Zero,
+                    statusCallback,
+                    CancellationToken.None);
+                
+                // Cleanup
+                try
+                {
+                    if (Directory.Exists(tempSource)) Directory.Delete(tempSource, true);
+                    if (Directory.Exists(tempTarget)) Directory.Delete(tempTarget, true);
+                }
+                catch { } // Ignore cleanup errors
+                
+                if (success)
+                {
+                    StatusText = "? Copy dialog test completed successfully!";
+                }
+                else
+                {
+                    StatusText = "?? Copy dialog test failed - dialog may not have appeared";
+                }
+                
+                // Reset status after delay
+                await Task.Delay(3000);
+                UpdateStatusText();
+                
+                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Copy dialog test completed - Success: {success}");
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"? Copy dialog test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Copy dialog test error - {ex.Message}");
+                
+                await Task.Delay(3000);
+                UpdateStatusText();
+            }
+        }
+
+        private async Task TestSequentialDialogsAsync()
+        {
+            try
+            {
+                StatusText = "?? Testing sequential copy dialogs (simulating real usage)...";
+                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Testing sequential copy dialogs");
+                
+                // Create multiple test sources
+                var tempBase = Path.Combine(Path.GetTempPath(), "GameCopierSequentialTest");
+                var testSources = new List<string>();
+                var testTargets = new List<string>();
+                
+                for (int i = 1; i <= 3; i++)
+                {
+                    var sourceDir = Path.Combine(tempBase, $"Source{i}");
+                    var targetDir = Path.Combine(tempBase, $"Target{i}");
+                    
+                    Directory.CreateDirectory(sourceDir);
+                    var testFilePath = Path.Combine(sourceDir, $"test{i}.txt");
+                    await File.WriteAllTextAsync(testFilePath, $"This is test file #{i} for sequential dialog testing.");
+                    
+                    testSources.Add(sourceDir);
+                    testTargets.Add(targetDir);
+                }
+                
+                StatusText = "?? Created 3 test sources, starting sequential copy tests...";
+                
+                // Test sequential copies to simulate the real issue
+                for (int i = 0; i < testSources.Count; i++)
+                {
+                    var operationNumber = i + 1;
+                    StatusText = $"?? Sequential Test {operationNumber}/3: Testing dialog visibility...";
+                    
+                    // Create status callback for real-time feedback
+                    Action<string> statusCallback = (status) =>
+                    {
+                        _uiDispatcher?.TryEnqueue(() =>
+                        {
+                            StatusText = $"?? Sequential Test {operationNumber}/3: {status}";
+                        });
+                    };
+                    
+                    // Use the enhanced forced dialog method
+                    bool success = await Services.FastCopyService.CopyDirectoryWithForcedDialogAsync(
+                        testSources[i],
+                        testTargets[i],
+                        IntPtr.Zero,
+                        statusCallback,
+                        CancellationToken.None);
+                    
+                    if (success)
+                    {
+                        StatusText = $"? Sequential Test {operationNumber}/3: Dialog appeared and copy completed!";
+                    }
+                    else
+                    {
+                        StatusText = $"? Sequential Test {operationNumber}/3: Copy failed or dialog didn't appear";
+                    }
+                    
+                    // Delay between operations to show results
+                    await Task.Delay(2000);
+                }
+                
+                // Cleanup
+                try
+                {
+                    if (Directory.Exists(tempBase)) Directory.Delete(tempBase, true);
+                }
+                catch { } // Ignore cleanup errors
+                
+                StatusText = "? Sequential dialog test completed! All 3 operations should have shown dialogs.";
+                
+                // Reset status after delay
+                await Task.Delay(5000);
+                UpdateStatusText();
+                
+                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Sequential copy dialog test completed");
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"? Sequential dialog test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Sequential dialog test error - {ex.Message}");
+                
+                await Task.Delay(3000);
+                UpdateStatusText();
+            }
+        }
+        
         private async Task AddGameFolderAsync()
         {
             var folderPicker = new FolderPicker();
@@ -503,6 +665,9 @@ namespace GameCopier.ViewModels
                 OnPropertyChanged(nameof(OverallProgress));
             else if (e.PropertyName == nameof(QueueViewModel.IsDeploymentRunning))
                 OnPropertyChanged(nameof(IsDeploymentRunning));
+            
+            // Always update queue analysis when queue changes
+            OnPropertyChanged(nameof(QueueAnalysis));
         }
 
         private void OnGamePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -626,7 +791,7 @@ namespace GameCopier.ViewModels
                 var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
                 var itemSize = selectedGame?.SizeInBytes ?? selectedSoftware!.SizeInBytes;
                 var sizeText = FormatBytes(itemSize);
-                StatusText = $"? {itemName} ({sizeText}) selected for {selectedDrive.Name}. Ready to add to queue!";
+                StatusText = $"? {itemName} ({sizeText}) selected for {selectedDrive.Name}. Windows copy dialog will appear during copy.";
             }
             else if (hasSelectedItem)
             {
@@ -643,7 +808,8 @@ namespace GameCopier.ViewModels
             {
                 var driveText = AvailableDrives.Count > 0 ? $"{AvailableDrives.Count} USB drives" : "No USB drives";
                 var recentText = mostRecentDrive != null ? $" | Most recent: {mostRecentDrive.DriveLetter}" : "";
-                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{recentText}";
+                var copyInfo = IsDeploymentRunning ? " | Copy operations running in background" : "";
+                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{recentText}{copyInfo}";
             }
 
             UpdateCommandStates();
