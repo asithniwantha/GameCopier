@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -21,7 +22,11 @@ namespace GameCopier.Services
         public event EventHandler<DeploymentJob>? JobUpdated;
         public event EventHandler<double>? OverallProgressUpdated;
 
-        public DeploymentService(int maxConcurrentJobs = 4)
+        // Configuration properties
+        public CopyMethod PreferredCopyMethod { get; set; } = CopyMethod.ExplorerDialog;
+        public bool UseLargeDiskBuffer { get; set; } = true;
+
+        public DeploymentService(int maxConcurrentJobs = 2) // Reduced for Explorer copy
         {
             _concurrencyLimit = new SemaphoreSlim(maxConcurrentJobs, maxConcurrentJobs);
             _loggingService = new LoggingService();
@@ -71,7 +76,7 @@ namespace GameCopier.Services
 
             var processingTasks = new List<Task>();
 
-            // Process jobs concurrently
+            // Process jobs sequentially for Explorer dialog visibility
             while (_jobQueue.TryDequeue(out var job) || _activeJobs.Any())
             {
                 if (_cancellationTokenSource.Token.IsCancellationRequested)
@@ -181,52 +186,205 @@ namespace GameCopier.Services
                 throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
             }
 
-            await CopyDirectoryAsync(sourceDir, targetDir, job, cancellationToken);
+            Debug.WriteLine($"Using Windows Explorer copy for {sourceDir} -> {targetDir}");
+            
+            // Use Windows Explorer copy based on preference
+            bool success = false;
+            
+            switch (PreferredCopyMethod)
+            {
+                case CopyMethod.ExplorerDialog:
+                    success = await FastCopyService.CopyDirectoryWithExplorerDialogAsync(sourceDir, targetDir, IntPtr.Zero, cancellationToken);
+                    break;
+                    
+                case CopyMethod.ExplorerSilent:
+                    success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
+                    break;
+                    
+                case CopyMethod.Robocopy:
+                    if (IsRobocopyAvailable())
+                    {
+                        await CopyDirectoryWithRobocopyAsync(sourceDir, targetDir, job, cancellationToken);
+                        return;
+                    }
+                    else
+                    {
+                        // Fallback to Explorer copy
+                        success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
+                    }
+                    break;
+                    
+                case CopyMethod.Xcopy:
+                    if (IsXcopyAvailable())
+                    {
+                        await CopyDirectoryWithXcopyAsync(sourceDir, targetDir, job, cancellationToken);
+                        return;
+                    }
+                    else
+                    {
+                        // Fallback to Explorer copy
+                        success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
+                    }
+                    break;
+                    
+                default:
+                    // Default to Explorer dialog
+                    success = await FastCopyService.CopyDirectoryWithExplorerDialogAsync(sourceDir, targetDir, IntPtr.Zero, cancellationToken);
+                    break;
+            }
+
+            if (!success)
+            {
+                throw new InvalidOperationException("Windows Explorer copy operation failed");
+            }
+
+            // Set progress to 100% since we can't track Explorer copy progress
+            job.Progress = 100.0;
+            JobUpdated?.Invoke(this, job);
         }
 
-        private async Task CopyDirectoryAsync(string sourceDir, string targetDir, DeploymentJob job, CancellationToken cancellationToken)
+        private static bool IsRobocopyAvailable()
+        {
+            try
+            {
+                var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "robocopy",
+                    Arguments = "/?",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true
+                });
+                process?.WaitForExit(1000);
+                return process?.ExitCode != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsXcopyAvailable()
+        {
+            try
+            {
+                var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "xcopy",
+                    Arguments = "/?",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true
+                });
+                process?.WaitForExit(1000);
+                return process?.ExitCode != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async Task CopyDirectoryWithRobocopyAsync(string sourceDir, string targetDir, DeploymentJob job, CancellationToken cancellationToken)
         {
             Directory.CreateDirectory(targetDir);
 
-            var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
-            var totalFiles = files.Length;
-            var processedFiles = 0;
-
-            var parallelOptions = new ParallelOptions
+            var arguments = $"\"{sourceDir}\" \"{targetDir}\" /E /MT:8 /NFL /NDL /NJH /NJS /NC /NS /NP";
+            
+            if (UseLargeDiskBuffer)
             {
-                CancellationToken = cancellationToken,
-                MaxDegreeOfParallelism = Environment.ProcessorCount
+                arguments += " /J"; // Use unbuffered I/O for large files
+            }
+
+            var processInfo = new ProcessStartInfo
+            {
+                FileName = "robocopy",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
 
-            await Parallel.ForEachAsync(files, parallelOptions, async (sourceFile, ct) =>
+            using var process = new Process { StartInfo = processInfo };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            // Monitor for cancellation
+            while (!process.HasExited && !cancellationToken.IsCancellationRequested)
             {
-                var relativePath = Path.GetRelativePath(sourceDir, sourceFile);
-                var targetFile = Path.Combine(targetDir, relativePath);
-                var targetFileDir = Path.GetDirectoryName(targetFile);
+                await Task.Delay(100, cancellationToken);
+            }
 
-                if (!string.IsNullOrEmpty(targetFileDir))
+            if (cancellationToken.IsCancellationRequested)
+            {
+                try
                 {
-                    Directory.CreateDirectory(targetFileDir);
+                    process.Kill();
                 }
+                catch { }
+                throw new OperationCanceledException();
+            }
 
-                await CopyFileAsync(sourceFile, targetFile, ct);
+            await process.WaitForExitAsync(cancellationToken);
 
-                var completed = Interlocked.Increment(ref processedFiles);
-                var progress = (double)completed / totalFiles * 100;
-
-                job.Progress = Math.Min(progress, 100.0);
-                JobUpdated?.Invoke(this, job);
-            });
+            // Robocopy exit codes: 0-7 are success, 8+ are errors
+            if (process.ExitCode >= 8)
+            {
+                throw new InvalidOperationException($"Robocopy failed with exit code {process.ExitCode}");
+            }
+            
+            job.Progress = 100.0;
+            JobUpdated?.Invoke(this, job);
         }
 
-        private static async Task CopyFileAsync(string sourceFile, string targetFile, CancellationToken cancellationToken)
+        private async Task CopyDirectoryWithXcopyAsync(string sourceDir, string targetDir, DeploymentJob job, CancellationToken cancellationToken)
         {
-            const int bufferSize = 81920; // 80KB buffer
+            Directory.CreateDirectory(targetDir);
+            
+            var arguments = $"\"{sourceDir}\" \"{targetDir}\" /E /I /Y /H /R";
 
-            using var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
-            using var targetStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, FileOptions.SequentialScan);
+            var processInfo = new ProcessStartInfo
+            {
+                FileName = "xcopy",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
 
-            await sourceStream.CopyToAsync(targetStream, bufferSize, cancellationToken);
+            using var process = new Process { StartInfo = processInfo };
+
+            process.Start();
+            process.BeginOutputReadLine();
+
+            while (!process.HasExited && !cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(100, cancellationToken);
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch { }
+                throw new OperationCanceledException();
+            }
+
+            await process.WaitForExitAsync(cancellationToken);
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Xcopy failed with exit code {process.ExitCode}");
+            }
+            
+            job.Progress = 100.0;
+            JobUpdated?.Invoke(this, job);
         }
 
         private void UpdateOverallProgress()

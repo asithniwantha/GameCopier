@@ -8,8 +8,16 @@
     <type fullname="GameCopier.Services.DriveDisplaySettings" preserve="all" />
     <type fullname="GameCopier.Services.SettingsJsonContext" preserve="all" />
     <type fullname="GameCopier.Services.LibraryJsonContext" preserve="all" />
+    <type fullname="GameCopier.Services.CopyMethod" preserve="all" />
+    <type fullname="GameCopier.Services.FastCopyService" preserve="all" />
   </assembly>
   
   <!-- Preserve reflection-based file operations -->
   <assembly fullname="System.IO.FileSystem" preserve="all" />
+  
+  <!-- Preserve System.Diagnostics.Process for external copy utilities -->
+  <assembly fullname="System.Diagnostics.Process" preserve="all" />
+  
+  <!-- Preserve Windows API calls for native copy operations -->
+  <assembly fullname="System.Runtime.InteropServices" preserve="all" />
 </linker>

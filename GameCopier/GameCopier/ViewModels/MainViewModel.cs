@@ -6,30 +6,37 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using System.Windows.Input;
 using System.Timers;
+using System.Windows.Input;
 using GameCopier.Models;
 using GameCopier.Services;
+using GameCopier.ViewModels.Managers;
 using Microsoft.UI.Dispatching;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
 namespace GameCopier.ViewModels
 {
+    /// <summary>
+    /// Simplified MainViewModel that orchestrates managers and handles UI coordination
+    /// </summary>
     public class MainViewModel : INotifyPropertyChanged
     {
-        private readonly LibraryService _libraryService;
-        private readonly DriveService _driveService;
-        private readonly DeploymentService _deploymentService;
-        private readonly UsbDriveDetectionService _usbDetectionService;
-        private readonly Timer _driveMonitorTimer;
+        // Managers
+        private readonly UsbDriveManager _usbDriveManager;
+        private readonly LibraryManager _libraryManager;
+        private readonly DeploymentManager _deploymentManager;
+        private readonly NavigationManager _navigationManager;
+        private readonly SettingsService _settingsService;
+        private readonly QueueViewModel _queueViewModel;
+        
+        // UI Threading
         private readonly DispatcherQueue? _uiDispatcher;
-        private int _usbEventCount = 0;
+        private readonly Timer _driveMonitorTimer;
 
+        // Properties
         private string _searchText = string.Empty;
         private string _softwareSearchText = string.Empty;
-        private double _overallProgress = 0.0;
-        private bool _isDeploymentRunning = false;
         private string _statusText = "Ready";
 
         public string SearchText
@@ -40,7 +47,6 @@ namespace GameCopier.ViewModels
                 if (_searchText != value)
                 {
                     _searchText = value;
-                    System.Diagnostics.Debug.WriteLine($"?? SearchText changed to: '{value}'");
                     OnPropertyChanged();
                     FilterGames();
                 }
@@ -55,30 +61,9 @@ namespace GameCopier.ViewModels
                 if (_softwareSearchText != value)
                 {
                     _softwareSearchText = value;
-                    System.Diagnostics.Debug.WriteLine($"?? SoftwareSearchText changed to: '{value}'");
                     OnPropertyChanged();
                     FilterSoftware();
                 }
-            }
-        }
-
-        public double OverallProgress
-        {
-            get => _overallProgress;
-            set
-            {
-                _overallProgress = value;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool IsDeploymentRunning
-        {
-            get => _isDeploymentRunning;
-            set
-            {
-                _isDeploymentRunning = value;
-                OnPropertyChanged();
             }
         }
 
@@ -93,25 +78,27 @@ namespace GameCopier.ViewModels
             }
         }
 
+        // Collections
         public ObservableCollection<Game> Games { get; } = new();
         public ObservableCollection<Game> FilteredGames { get; } = new();
         public ObservableCollection<Software> Software { get; } = new();
         public ObservableCollection<Software> FilteredSoftware { get; } = new();
         public ObservableCollection<Drive> AvailableDrives { get; } = new();
-        public ObservableCollection<DeploymentJob> DeploymentJobs { get; } = new();
 
+        // Queue properties from QueueViewModel
+        public ObservableCollection<DeploymentJob> DeploymentJobs => _queueViewModel.DeploymentJobs;
+        public double OverallProgress => _queueViewModel.OverallProgress;
+        public bool IsDeploymentRunning => _queueViewModel.IsDeploymentRunning;
+
+        // Search result properties
         public string GameSearchResultsText
         {
             get
             {
-                if (string.IsNullOrWhiteSpace(SearchText))
-                    return "";
-                
+                if (string.IsNullOrWhiteSpace(SearchText)) return "";
                 var count = FilteredGames.Count;
                 var total = Games.Count;
-                var result = count == 1 ? $"Found 1 game out of {total}" : $"Found {count} games out of {total}";
-                System.Diagnostics.Debug.WriteLine($"?? GameSearchResultsText: '{result}'");
-                return result;
+                return count == 1 ? $"Found 1 game out of {total}" : $"Found {count} games out of {total}";
             }
         }
 
@@ -119,24 +106,21 @@ namespace GameCopier.ViewModels
         {
             get
             {
-                if (string.IsNullOrWhiteSpace(SoftwareSearchText))
-                    return "";
-                
+                if (string.IsNullOrWhiteSpace(SoftwareSearchText)) return "";
                 var count = FilteredSoftware.Count;
                 var total = Software.Count;
-                var result = count == 1 ? $"Found 1 software out of {total}" : $"Found {count} software out of {total}";
-                System.Diagnostics.Debug.WriteLine($"?? SoftwareSearchResultsText: '{result}'");
-                return result;
+                return count == 1 ? $"Found 1 software out of {total}" : $"Found {count} software out of {total}";
             }
         }
 
+        // Commands
         public ICommand LoadGamesCommand { get; }
         public ICommand RefreshLibraryCommand { get; }
         public ICommand LoadSoftwareCommand { get; }
         public ICommand RefreshSoftwareLibraryCommand { get; }
         public ICommand LoadDrivesCommand { get; }
-        public ICommand StartDeploymentCommand { get; }
-        public ICommand CancelDeploymentCommand { get; }
+        public ICommand RefreshDrivesCommand { get; } // Add manual refresh command
+        public ICommand ForceShowDrivesCommand { get; } // Force show drives for testing
         public ICommand ShowSettingsCommand { get; }
         public ICommand AddGameFolderCommand { get; }
         public ICommand AddSoftwareFolderCommand { get; }
@@ -145,637 +129,234 @@ namespace GameCopier.ViewModels
         public ICommand OpenGameFolderCommand { get; }
         public ICommand OpenSoftwareFolderCommand { get; }
         
-        // New copy queue commands
+        // Queue commands
         public ICommand AddToQueueCommand { get; }
         public ICommand RemoveFromQueueCommand { get; }
         public ICommand ClearQueueCommand { get; }
         public ICommand StartQueueCommand { get; }
-        public ICommand PauseQueueCommand { get; }
-        
-        // Individual job control commands
-        public ICommand PauseJobCommand { get; }
-        public ICommand ResumeJobCommand { get; }
-        public ICommand CancelJobCommand { get; }
 
+        // Events
         public event EventHandler? RequestSettingsDialog;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         public MainViewModel()
         {
-            System.Diagnostics.Debug.WriteLine("?? Initializing MainViewModel with USB-only detection...");
+            System.Diagnostics.Debug.WriteLine("?? MainViewModel: Initializing with modular architecture...");
             
-            // CRITICAL: Capture the UI dispatcher during initialization (on UI thread)
+            // Capture UI dispatcher
             _uiDispatcher = DispatcherQueue.GetForCurrentThread();
             if (_uiDispatcher == null)
             {
-                System.Diagnostics.Debug.WriteLine("? CRITICAL: Could not get UI dispatcher during initialization!");
+                System.Diagnostics.Debug.WriteLine("? MainViewModel: Could not get UI dispatcher!");
             }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("? UI dispatcher captured successfully");
-            }
-            
-            _libraryService = new LibraryService();
-            _driveService = new DriveService();
-            _deploymentService = new DeploymentService();
-            _usbDetectionService = new UsbDriveDetectionService();
 
-            _deploymentService.JobUpdated += OnJobUpdated;
-            _deploymentService.OverallProgressUpdated += OnOverallProgressUpdated;
-            _usbDetectionService.UsbDriveChanged += OnUsbDriveChanged;
+            // Initialize services
+            _settingsService = new SettingsService();
 
+            // Initialize managers
+            _usbDriveManager = new UsbDriveManager(_uiDispatcher);
+            _libraryManager = new LibraryManager();
+            _deploymentManager = new DeploymentManager(_uiDispatcher);
+            _navigationManager = new NavigationManager(_uiDispatcher);
+            _queueViewModel = new QueueViewModel(_deploymentManager);
+
+            // Subscribe to manager events
+            _usbDriveManager.DrivesUpdated += OnDrivesUpdated;
+            _usbDriveManager.StatusChanged += OnStatusChanged;
+            _libraryManager.GamesUpdated += OnGamesUpdated;
+            _libraryManager.SoftwareUpdated += OnSoftwareUpdated;
+            _libraryManager.StatusChanged += OnStatusChanged;
+            _deploymentManager.StatusChanged += OnStatusChanged;
+            _navigationManager.StatusChanged += OnStatusChanged;
+            _queueViewModel.StatusChanged += OnStatusChanged;
+            _queueViewModel.PropertyChanged += OnQueuePropertyChanged;
+
+            // Initialize commands
             LoadGamesCommand = new RelayCommand(async () => await LoadGamesAsync());
             RefreshLibraryCommand = new RelayCommand(async () => await RefreshLibraryAsync());
             LoadSoftwareCommand = new RelayCommand(async () => await LoadSoftwareAsync());
             RefreshSoftwareLibraryCommand = new RelayCommand(async () => await RefreshSoftwareLibraryAsync());
             LoadDrivesCommand = new RelayCommand(async () => await LoadDrivesAsync());
-            StartDeploymentCommand = new RelayCommand(async () => await StartDeploymentAsync());
-            CancelDeploymentCommand = new RelayCommand(CancelDeployment);
+            RefreshDrivesCommand = new RelayCommand(async () => await RefreshDrivesManuallyAsync());
+            ForceShowDrivesCommand = new RelayCommand(async () => await ForceShowDrivesAsync());
             ShowSettingsCommand = new RelayCommand(ShowSettings);
             AddGameFolderCommand = new RelayCommand(async () => await AddGameFolderAsync());
             AddSoftwareFolderCommand = new RelayCommand(async () => await AddSoftwareFolderAsync());
             ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
             ClearSoftwareSearchCommand = new RelayCommand(() => SoftwareSearchText = string.Empty);
-            OpenGameFolderCommand = new RelayCommand<Game>(OpenGameFolder);
-            OpenSoftwareFolderCommand = new RelayCommand<Software>(OpenSoftwareFolder);
+            OpenGameFolderCommand = new RelayCommand<Game>(game => _navigationManager.OpenGameFolder(game));
+            OpenSoftwareFolderCommand = new RelayCommand<Software>(software => _navigationManager.OpenSoftwareFolder(software));
             
-            // Initialize new copy queue commands
+            // Queue commands
             AddToQueueCommand = new RelayCommand(AddToQueue, CanAddToQueue);
-            RemoveFromQueueCommand = new RelayCommand<DeploymentJob>(RemoveFromQueue);
-            ClearQueueCommand = new RelayCommand(ClearQueue, () => DeploymentJobs.Any());
-            StartQueueCommand = new RelayCommand(async () => await StartQueueAsync(), CanStartQueue);
-            PauseQueueCommand = new RelayCommand(PauseQueue, () => IsDeploymentRunning);
-            
-            // Individual job control commands
-            PauseJobCommand = new RelayCommand<DeploymentJob>(PauseJob);
-            ResumeJobCommand = new RelayCommand<DeploymentJob>(ResumeJob);
-            CancelJobCommand = new RelayCommand<DeploymentJob>(CancelJob);
+            RemoveFromQueueCommand = new RelayCommand<DeploymentJob>(job => _queueViewModel.RemoveFromQueue(job));
+            ClearQueueCommand = new RelayCommand(() => _queueViewModel.ClearQueue(), () => DeploymentJobs.Count > 0);
+            StartQueueCommand = new RelayCommand(async () => await StartQueueAsync(), () => _queueViewModel.CanStartQueue());
 
-            // Backup timer monitoring (much less frequent since we have real-time detection)
-            _driveMonitorTimer = new Timer(30000); // Check every 30 seconds as backup
+            // Backup timer for drive monitoring
+            _driveMonitorTimer = new Timer(30000); // 30 seconds
             _driveMonitorTimer.Elapsed += OnDriveMonitorTimer;
             _driveMonitorTimer.AutoReset = true;
-            // Don't start timer yet - wait for initialization
 
-            System.Diagnostics.Debug.WriteLine("?? MainViewModel initialization complete - USB-only mode active");
+            System.Diagnostics.Debug.WriteLine("?? MainViewModel: Initialization complete");
             
-            // Start initialization immediately
+            // Start initialization
             _ = Task.Run(async () => await InitializeAsync());
-        }
-
-        private async void OnUsbDriveChanged(object? sender, UsbDriveChangedEventArgs e)
-        {
-            _usbEventCount++;
-            System.Diagnostics.Debug.WriteLine($"?? USB-only drive change event #{_usbEventCount} received from BACKGROUND THREAD");
-            
-            if (e.AddedDrives.Any())
-            {
-                System.Diagnostics.Debug.WriteLine($"? Added drives: {string.Join(", ", e.AddedDrives)}");
-                if (e.MostRecentDrive != null)
-                {
-                    System.Diagnostics.Debug.WriteLine($"? Most recent drive: {e.MostRecentDrive}");
-                }
-            }
-            
-            if (e.RemovedDrives.Any())
-            {
-                System.Diagnostics.Debug.WriteLine($"? Removed drives: {string.Join(", ", e.RemovedDrives)}");
-            }
-            
-            // Real-time USB drive detection event
-            if (!IsDeploymentRunning)
-            {
-                try
-                {
-                    // Handle added drives with enhanced highlighting
-                    if (e.AddedDrives.Any())
-                    {
-                        await HandleDrivesAdded(e.AddedDrives, e.MostRecentDrive);
-                    }
-                    
-                    // Handle removed drives
-                    if (e.RemovedDrives.Any())
-                    {
-                        await HandleDrivesRemoved(e.RemovedDrives);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"? Error handling USB drive change: {ex.Message}");
-                }
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine("??  USB event ignored - deployment is running");
-            }
-        }
-
-        private async Task HandleDrivesAdded(List<string> addedDrives, string? mostRecentDrive)
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? Handling drives added with enhanced highlighting...");
-                
-                if (_uiDispatcher == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("? No UI dispatcher available!");
-                    return;
-                }
-                
-                // Get fresh drive data with highlighting
-                var drives = await _driveService.GetRemovableDrivesWithHighlightAsync(mostRecentDrive);
-                System.Diagnostics.Debug.WriteLine($"?? Got {drives.Count()} USB drives from service");
-                
-                // Update UI on the captured UI thread with enhanced logic from USBDriveDitector
-                var success = _uiDispatcher.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        System.Diagnostics.Debug.WriteLine("?? EXECUTING ON UI THREAD: Enhanced drive addition handling...");
-                        
-                        // Clear the "newly inserted" flag from all existing drives (USBDriveDitector pattern)
-                        foreach (var existingDrive in AvailableDrives)
-                        {
-                            existingDrive.IsRecentlyPlugged = false;
-                        }
-                        
-                        // Preserve selection state when refreshing
-                        var previousSelections = AvailableDrives.Where(d => d.IsSelected).Select(d => d.DriveLetter).ToList();
-                        System.Diagnostics.Debug.WriteLine($"?? Preserving selections for: {string.Join(", ", previousSelections)}");
-                        
-                        AvailableDrives.Clear();
-                        
-                        foreach (var drive in drives)
-                        {
-                            // Restore selection if drive was previously selected
-                            if (previousSelections.Contains(drive.DriveLetter))
-                            {
-                                drive.IsSelected = true;
-                                System.Diagnostics.Debug.WriteLine($"?? Restored selection for drive: {drive.DriveLetter}");
-                            }
-                            
-                            // Set insertion time for newly added drives
-                            if (addedDrives.Contains(drive.DriveLetter))
-                            {
-                                drive.InsertedTime = DateTime.Now;
-                                
-                                // Create enhanced status message with brand info
-                                var brandInfo = !string.IsNullOrEmpty(drive.BrandName) ? $" ({drive.BrandName})" : "";
-                                var driveDescription = !string.IsNullOrEmpty(drive.Label) ? drive.Label : "USB Drive";
-                                StatusText = $"?? USB drive inserted: {driveDescription}{brandInfo} - {drive.DriveLetter}";
-                                
-                                System.Diagnostics.Debug.WriteLine($"? Drive added with enhanced info: {drive.DriveLetter} - {drive.EnhancedDescription}");
-                                
-                                // Schedule highlight removal after 30 seconds (USBDriveDitector pattern)
-                                _ = Task.Delay(30000).ContinueWith(_ =>
-                                {
-                                    _uiDispatcher?.TryEnqueue(() =>
-                                    {
-                                        if (AvailableDrives.Any(d => d.DriveLetter == drive.DriveLetter))
-                                        {
-                                            var driveToUpdate = AvailableDrives.FirstOrDefault(d => d.DriveLetter == drive.DriveLetter);
-                                            if (driveToUpdate != null)
-                                            {
-                                                driveToUpdate.IsRecentlyPlugged = false;
-                                                System.Diagnostics.Debug.WriteLine($"? Removed highlight from drive: {drive.DriveLetter}");
-                                            }
-                                        }
-                                    });
-                                });
-                            }
-                            
-                            AvailableDrives.Add(drive);
-                        }
-                        
-                        UpdateStatusText();
-                        System.Diagnostics.Debug.WriteLine($"? Enhanced drive addition complete - {AvailableDrives.Count} USB drives now in UI");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"? UI UPDATE ERROR: {ex.Message}");
-                    }
-                });
-                
-                if (success)
-                {
-                    System.Diagnostics.Debug.WriteLine("? Successfully queued enhanced UI update");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("? Failed to queue UI update");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? Error in HandleDrivesAdded: {ex.Message}");
-            }
-        }
-
-        private async Task HandleDrivesRemoved(List<string> removedDrives)
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? Handling drives removed...");
-                
-                if (_uiDispatcher == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("? No UI dispatcher available!");
-                    return;
-                }
-                
-                // Update UI on the captured UI thread with USBDriveDitector pattern
-                var success = _uiDispatcher.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        foreach (var removedDriveLetter in removedDrives)
-                        {
-                            var driveToRemove = AvailableDrives.FirstOrDefault(d => d.DriveLetter == removedDriveLetter);
-                            if (driveToRemove != null)
-                            {
-                                // Enhanced status message with brand info (USBDriveDitector pattern)
-                                var driveDescription = !string.IsNullOrEmpty(driveToRemove.BrandName) 
-                                    ? $"{driveToRemove.Label} ({driveToRemove.BrandName})" 
-                                    : driveToRemove.Label ?? "USB Drive";
-                                
-
-                                AvailableDrives.Remove(driveToRemove);
-                                StatusText = $"?? USB drive removed: {driveDescription} - {removedDriveLetter}";
-                                System.Diagnostics.Debug.WriteLine($"? Drive removed from UI: {removedDriveLetter}");
-                            }
-                            else
-                            {
-                                System.Diagnostics.Debug.WriteLine($"?? Drive not found in UI for removal: {removedDriveLetter}");
-                            }
-                        }
-                        
-                        UpdateStatusText();
-                        
-                        // Reset status after a moment
-                        _ = Task.Delay(3000).ContinueWith(_ =>
-                        {
-                            _uiDispatcher?.TryEnqueue(() => 
-                            {
-                                if (StatusText.Contains("USB drive removed"))
-                                {
-                                    UpdateStatusText();
-                                }
-                            });
-                        });
-                        
-                        System.Diagnostics.Debug.WriteLine($"? Drive removal complete - {AvailableDrives.Count} USB drives remaining");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"? UI UPDATE ERROR: {ex.Message}");
-                    }
-                });
-                
-                if (success)
-                {
-                    System.Diagnostics.Debug.WriteLine("? Successfully queued drive removal UI update");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("? Failed to queue drive removal UI update");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? Error in HandleDrivesRemoved: {ex.Message}");
-            }
-        }
-
-        private async void OnDriveMonitorTimer(object? sender, ElapsedEventArgs e)
-        {
-            // Backup monitoring (much less frequent)
-            if (!IsDeploymentRunning)
-            {
-                try
-                {
-                    System.Diagnostics.Debug.WriteLine("? Backup timer: Checking USB drives...");
-                    await LoadDrivesAsync();
-                }
-                catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? Backup timer error: {ex.Message}");
-                }
-            }
-        }
-
-        private void ShowSettings()
-        {
-            RequestSettingsDialog?.Invoke(this, EventArgs.Empty);
         }
 
         private async Task InitializeAsync()
         {
             try
             {
-                StatusText = "?? Initializing GameDeploy Kiosk with USB-only detection...";
+                StatusText = "?? Initializing GameDeploy Kiosk...";
+                
                 await LoadGamesAsync();
                 await LoadSoftwareAsync();
                 await LoadDrivesAsync();
-                StatusText = "? Initialization complete - USB-only monitoring active!";
                 
-                // Start the backup timer after initialization
+                StatusText = "? Initialization complete - Ready for operation!";
                 _driveMonitorTimer.Start();
                 
-                // Show initial status after a moment
                 await Task.Delay(2000);
                 UpdateStatusText();
             }
             catch (Exception ex)
             {
                 StatusText = $"? Initialization error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Initialization error: {ex.Message}");
-                
-                // Still start the timer even if initialization fails
-                _driveMonitorTimer.Start();
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Initialization error - {ex.Message}");
+                _driveMonitorTimer.Start(); // Start timer anyway
             }
         }
 
         private async Task LoadGamesAsync()
         {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? Loading games...");
-                var games = await _libraryService.GetGamesAsync();
-                
-                // Add sample data if no games found (for testing)
-                if (!games.Any())
-                {
-                    System.Diagnostics.Debug.WriteLine("?? No games found, adding sample data for testing...");
-                    var sampleGames = new List<Game>
-                    {
-                        new Game { Name = "Super Mario Bros", SizeInBytes = 100L * 1024 * 1024, FolderPath = @"C:\Games\SuperMarioBros" }, // 100MB
-                        new Game { Name = "The Legend of Zelda", SizeInBytes = 200L * 1024 * 1024, FolderPath = @"C:\Games\Zelda" }, // 200MB
-                        new Game { Name = "Minecraft", SizeInBytes = 500L * 1024 * 1024, FolderPath = @"C:\Games\Minecraft" }, // 500MB
-                        new Game { Name = "Call of Duty", SizeInBytes = 2L * 1024 * 1024 * 1024, FolderPath = @"C:\Games\CallOfDuty" }, // 2GB
-                        new Game { Name = "Among Us", SizeInBytes = 50L * 1024 * 1024, FolderPath = @"C:\Games\AmongUs" } // 50MB
-                    };
-                    games = sampleGames;
-                }
-                
-                // Update on UI thread using stored dispatcher
-                if (_uiDispatcher != null)
-                {
-                    _ = _uiDispatcher.TryEnqueue(() =>
-                    {
-                        Games.Clear();
-                        foreach (var game in games)
-                        {
-                            // Subscribe to PropertyChanged to update command states
-                            game.PropertyChanged += OnGamePropertyChanged;
-                            Games.Add(game);
-                        }
-                        FilterGames();
-                        UpdateStatusText();
-                        OnPropertyChanged(nameof(GameSearchResultsText));
-                        System.Diagnostics.Debug.WriteLine($"? Loaded {games.Count()} games");
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error loading games: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error loading games: {ex.Message}");
-            }
+            var games = await _libraryManager.LoadGamesAsync();
+            // Games updated via event handler
         }
 
         private async Task RefreshLibraryAsync()
         {
-            try
-            {
-                StatusText = "?? Scanning game library...";
-                System.Diagnostics.Debug.WriteLine("?? Refreshing game library...");
-                var games = await _libraryService.ScanGameLibraryAsync();
-                
-                // Update on UI thread using stored dispatcher
-                if (_uiDispatcher != null)
-                {
-                    _ = _uiDispatcher.TryEnqueue(() =>
-                    {
-                        Games.Clear();
-                        foreach (var game in games)
-                        {
-                            Games.Add(game);
-                        }
-                        FilterGames();
-                        UpdateStatusText();
-                        OnPropertyChanged(nameof(GameSearchResultsText));
-                        System.Diagnostics.Debug.WriteLine($"? Refreshed library with {games.Count()} games");
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error refreshing library: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error refreshing library: {ex.Message}");
-            }
+            var games = await _libraryManager.RefreshGamesAsync();
+            // Games updated via event handler
         }
 
         private async Task LoadSoftwareAsync()
         {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? Loading software...");
-                var software = await _libraryService.GetSoftwareAsync();
-                
-                // Add sample data if no software found (for testing)
-                if (!software.Any())
-                {
-                    System.Diagnostics.Debug.WriteLine("?? No software found, adding sample data for testing...");
-                    var sampleSoftware = new List<Software>
-                    {
-                        new Software { Name = "Microsoft Office", SizeInBytes = 3L * 1024 * 1024 * 1024, FolderPath = @"C:\Software\Office" }, // 3GB
-                        new Software { Name = "Adobe Photoshop", SizeInBytes = 2L * 1024 * 1024 * 1024, FolderPath = @"C:\Software\Photoshop" }, // 2GB
-                        new Software { Name = "Visual Studio Code", SizeInBytes = 300L * 1024 * 1024, FolderPath = @"C:\Software\VSCode" }, // 300MB
-                        new Software { Name = "Chrome Browser", SizeInBytes = 150L * 1024 * 1024, FolderPath = @"C:\Software\Chrome" }, // 150MB
-                        new Software { Name = "Notepad++", SizeInBytes = 10L * 1024 * 1024, FolderPath = @"C:\Software\NotepadPlusPlus" } // 10MB
-                    };
-                    software = sampleSoftware;
-                }
-                
-                // Update on UI thread using stored dispatcher
-                if (_uiDispatcher != null)
-                {
-                    _ = _uiDispatcher.TryEnqueue(() =>
-                    {
-                        Software.Clear();
-                        foreach (var softwareItem in software)
-                        {
-                            // Subscribe to PropertyChanged to update command states
-                            softwareItem.PropertyChanged += OnSoftwarePropertyChanged;
-                            Software.Add(softwareItem);
-                        }
-                        FilterSoftware();
-                        UpdateStatusText();
-                        OnPropertyChanged(nameof(SoftwareSearchResultsText));
-                        System.Diagnostics.Debug.WriteLine($"? Loaded {software.Count()} software items");
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error loading software: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error loading software: {ex.Message}");
-            }
+            var software = await _libraryManager.LoadSoftwareAsync();
+            // Software updated via event handler
         }
 
         private async Task RefreshSoftwareLibraryAsync()
         {
-            try
-            {
-                StatusText = "?? Scanning software library...";
-                System.Diagnostics.Debug.WriteLine("?? Refreshing software library...");
-                var software = await _libraryService.ScanSoftwareLibraryAsync();
-                
-                // Update on UI thread using stored dispatcher
-                if (_uiDispatcher != null)
-                {
-                    _ = _uiDispatcher.TryEnqueue(() =>
-                    {
-                        Software.Clear();
-                        foreach (var softwareItem in software)
-                        {
-                            Software.Add(softwareItem);
-                        }
-                        FilterSoftware();
-                        UpdateStatusText();
-                        OnPropertyChanged(nameof(SoftwareSearchResultsText));
-                        System.Diagnostics.Debug.WriteLine($"? Refreshed software library with {software.Count()} items");
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error refreshing software library: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error refreshing software library: {ex.Message}");
-            }
+            var software = await _libraryManager.RefreshSoftwareAsync();
+            // Software updated via event handler
         }
 
         private async Task LoadDrivesAsync()
         {
+            var drives = await _usbDriveManager.LoadDrivesAsync();
+            // Drives updated via event handler
+        }
+
+        private async Task RefreshDrivesManuallyAsync()
+        {
             try
             {
-                System.Diagnostics.Debug.WriteLine("?? === LoadDrivesAsync STARTED ===");
+                StatusText = "?? Manually refreshing USB drives...";
+                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Manual drive refresh requested");
                 
-                // Get the current most recent drive from the detection service
-                var mostRecentDrive = _usbDetectionService.CurrentMostRecentDrive;
-                System.Diagnostics.Debug.WriteLine($"?? Most recent drive from detection service: {mostRecentDrive ?? "none"}");
+                // Force a fresh load of drives
+                var drives = await _usbDriveManager.LoadDrivesAsync();
                 
-                // Use the highlighting method to include most recent drive info
-                System.Diagnostics.Debug.WriteLine("?? Calling GetRemovableDrivesWithHighlightAsync...");
-                var drives = await _driveService.GetRemovableDrivesWithHighlightAsync(mostRecentDrive);
-                System.Diagnostics.Debug.WriteLine($"?? GetRemovableDrivesWithHighlightAsync returned {drives.Count()} drives");
-                
-                // Log each drive returned
-                foreach (var drive in drives)
+                if (drives.Count > 0)
                 {
-                    System.Diagnostics.Debug.WriteLine($"?? Service returned drive: {drive.DriveLetter} - {drive.Name}");
-                }
-                
-                // Update on UI thread using stored dispatcher
-                if (_uiDispatcher != null)
-                {
-                    System.Diagnostics.Debug.WriteLine("?? Queueing UI update...");
-                    var success = _uiDispatcher.TryEnqueue(() =>
-                    {
-                        UpdateDriveListDirectly(drives.ToList());
-                    });
-                    System.Diagnostics.Debug.WriteLine($"?? UI update queued successfully: {success}");
+                    StatusText = $"? Found {drives.Count} drives";
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("?? ERROR: No UI dispatcher available!");
+                    StatusText = "?? No drives found - check settings or connect a USB drive";
                 }
                 
-                System.Diagnostics.Debug.WriteLine("?? === LoadDrivesAsync COMPLETED ===");
+                // Update the UI regardless
+                _uiDispatcher?.TryEnqueue(() =>
+                {
+                    UpdateDriveListDirectly(drives);
+                });
+                
+                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Manual refresh complete - {drives.Count} drives found");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Error loading USB drives: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error loading USB drives: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? Stack trace: {ex.StackTrace}");
+                StatusText = $"? Error refreshing drives: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Manual refresh error - {ex.Message}");
             }
         }
 
-        private async Task StartDeploymentAsync()
+        private async Task ForceShowDrivesAsync()
         {
-            if (IsDeploymentRunning) return;
-
-            var selectedGames = Games.Where(g => g.IsSelected).ToList();
-            var selectedSoftware = Software.Where(s => s.IsSelected).ToList();
-            var selectedDrives = AvailableDrives.Where(d => d.IsSelected).ToList();
-
-            if (!selectedGames.Any() && !selectedSoftware.Any())
-            {
-                StatusText = "?? Please select at least one game or software to deploy.";
-                return;
-            }
-
-            if (!selectedDrives.Any())
-            {
-                StatusText = "?? Please select at least one USB drive.";
-                return;
-            }
-
-            // Combine games and software for space checking
-            var allSelectedItems = selectedGames.Cast<object>().Concat(selectedSoftware.Cast<object>()).ToList();
-            var totalSize = selectedGames.Sum(g => g.SizeInBytes) + selectedSoftware.Sum(s => s.SizeInBytes);
-
-            // Check if drives have sufficient space
-            foreach (var drive in selectedDrives)
-            {
-                if (drive.FreeSizeInBytes < totalSize)
-                {
-                    StatusText = $"?? USB drive {drive.Name} does not have sufficient space for selected items.";
-                    return;
-                }
-            }
-
             try
             {
-                IsDeploymentRunning = true;
-                _driveMonitorTimer.Stop(); // Stop monitoring during deployment
-                DeploymentJobs.Clear();
-
-                // Queue games and software for deployment
-                _deploymentService.QueueMultipleDeployments(selectedGames, selectedDrives);
-                // Note: You'll need to extend DeploymentService to handle Software as well
-                        
-                var totalItems = selectedGames.Count + selectedSoftware.Count;
-                StatusText = $"?? Starting deployment of {totalItems} items to {selectedDrives.Count} USB drives...";
-                System.Diagnostics.Debug.WriteLine($"?? Starting deployment: {totalItems} items to {selectedDrives.Count} USB drives");
+                StatusText = "?? Force showing all available drives...";
+                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Force show drives requested");
                 
-                await _deploymentService.StartDeploymentAsync();
+                // Create a basic drive list that shows all non-C drives
+                var allDrives = System.IO.DriveInfo.GetDrives()
+                    .Where(d => d.IsReady && !d.Name.ToUpper().StartsWith("C:"))
+                    .ToList();
                 
-                StatusText = "? Deployment completed successfully!";
-                System.Diagnostics.Debug.WriteLine("? Deployment completed successfully");
+                var forcedDrives = new List<Drive>();
+                
+                foreach (var driveInfo in allDrives)
+                {
+                    var drive = new Drive
+                    {
+                        Name = $"?? {driveInfo.VolumeLabel ?? "Drive"} ({driveInfo.Name}) - FORCED",
+                        DriveLetter = driveInfo.Name.TrimEnd('\\'),
+                        Label = driveInfo.VolumeLabel ?? "Drive",
+                        TotalSizeInBytes = driveInfo.TotalSize,
+                        FreeSizeInBytes = driveInfo.AvailableFreeSpace,
+                        IsRemovable = driveInfo.DriveType == DriveType.Removable,
+                        DetectedAt = DateTime.Now,
+                        DeviceDescription = $"Forced {driveInfo.DriveType} Drive",
+                        FileSystem = driveInfo.DriveFormat ?? "Unknown"
+                    };
+                    
+                    forcedDrives.Add(drive);
+                    System.Diagnostics.Debug.WriteLine($"?? Forced drive: {drive.DriveLetter} - {drive.Name}");
+                }
+                
+                // If no drives found, create demo drives
+                if (forcedDrives.Count == 0)
+                {
+                    forcedDrives.Add(new Drive
+                    {
+                        Name = "?? TEST USB Drive (Demo)",
+                        DriveLetter = "X:",
+                        Label = "TEST_USB",
+                        TotalSizeInBytes = 32L * 1024 * 1024 * 1024, // 32GB
+                        FreeSizeInBytes = 30L * 1024 * 1024 * 1024,  // 30GB free
+                        IsRemovable = true,
+                        DetectedAt = DateTime.Now,
+                        DeviceDescription = "Forced Demo Drive",
+                        FileSystem = "NTFS"
+                    });
+                }
+                
+                StatusText = $"?? Force showing {forcedDrives.Count} drives";
+                
+                // Update the UI
+                _uiDispatcher?.TryEnqueue(() =>
+                {
+                    UpdateDriveListDirectly(forcedDrives);
+                });
+                
+                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Force show complete - {forcedDrives.Count} drives forced");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Deployment error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Deployment error: {ex.Message}");
+                StatusText = $"? Error force showing drives: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Force show error - {ex.Message}");
             }
-            finally
-            {
-                IsDeploymentRunning = false;
-                OverallProgress = 0;
-                _driveMonitorTimer.Start(); // Resume monitoring
-            }
-        }
-
-        private void CancelDeployment()
-        {
-            if (!IsDeploymentRunning) return;
-
-            _deploymentService.CancelAllJobs();
-            StatusText = "?? Deployment cancelled by user.";
-            IsDeploymentRunning = false;
-            OverallProgress = 0;
-            _driveMonitorTimer.Start(); // Resume monitoring
-            System.Diagnostics.Debug.WriteLine("?? Deployment cancelled by user");
         }
 
         private async Task AddGameFolderAsync()
@@ -784,15 +365,14 @@ namespace GameCopier.ViewModels
             folderPicker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
             folderPicker.FileTypeFilter.Add("*");
 
-            // Use the static MainWindow property from App
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(GameCopier.App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
+            var hwnd = WindowNative.GetWindowHandle(GameCopier.App.MainWindow);
+            InitializeWithWindow.Initialize(folderPicker, hwnd);
 
             var folder = await folderPicker.PickSingleFolderAsync();
             if (folder != null)
             {
-                await _libraryService.AddGameFolderAsync(folder.Path);
-                await LoadGamesAsync(); // Refresh the game list
+                await _libraryManager.AddGameFolderAsync(folder.Path);
+                await LoadGamesAsync();
             }
         }
 
@@ -802,111 +382,212 @@ namespace GameCopier.ViewModels
             folderPicker.SuggestedStartLocation = PickerLocationId.ComputerFolder;
             folderPicker.FileTypeFilter.Add("*");
 
-            // Use the static MainWindow property from App
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(GameCopier.App.MainWindow);
-            WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, hwnd);
+            var hwnd = WindowNative.GetWindowHandle(GameCopier.App.MainWindow);
+            InitializeWithWindow.Initialize(folderPicker, hwnd);
 
             var folder = await folderPicker.PickSingleFolderAsync();
             if (folder != null)
             {
-                await _libraryService.AddSoftwareFolderAsync(folder.Path);
-                await LoadSoftwareAsync(); // Refresh the software list
+                await _libraryManager.AddSoftwareFolderAsync(folder.Path);
+                await LoadSoftwareAsync();
             }
         }
 
-        private void OpenGameFolder(Game? game)
+        private void AddToQueue()
         {
-            if (game == null || string.IsNullOrEmpty(game.FolderPath))
+            var selectedGame = Games.FirstOrDefault(g => g.IsSelected);
+            var selectedSoftware = Software.FirstOrDefault(s => s.IsSelected);
+            var selectedDrive = AvailableDrives.FirstOrDefault(d => d.IsSelected);
+
+            bool success = _queueViewModel.AddToQueue(selectedGame, selectedSoftware, selectedDrive);
+            
+            if (success)
             {
-                System.Diagnostics.Debug.WriteLine("? Cannot open folder: Game or FolderPath is null/empty");
-                return;
-            }
-
-            OpenFolderInExplorer(game.FolderPath);
-        }
-
-        private void OpenSoftwareFolder(Software? software)
-        {
-            if (software == null || string.IsNullOrEmpty(software.FolderPath))
-            {
-                System.Diagnostics.Debug.WriteLine("? Cannot open folder: Software or FolderPath is null/empty");
-                return;
-            }
-
-            OpenFolderInExplorer(software.FolderPath);
-        }
-
-        private void OpenFolderInExplorer(string folderPath)
-        {
-            try
-            {
-                if (!System.IO.Directory.Exists(folderPath))
+                // Auto-start queue
+                _ = Task.Run(async () => 
                 {
-                    System.Diagnostics.Debug.WriteLine($"? Folder does not exist: {folderPath}");
-                    StatusText = $"? Folder not found: {folderPath}";
-                    return;
-                }
-
-                System.Diagnostics.Debug.WriteLine($"?? Opening folder in Explorer: {folderPath}");
-                
-                // Use Process.Start to open the folder in Windows Explorer
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = $"\"{folderPath}\"",
-                    UseShellExecute = true
-                };
-
-                System.Diagnostics.Process.Start(startInfo);
-                
-                StatusText = $"?? Opened folder: {System.IO.Path.GetFileName(folderPath)}";
-                
-                // Reset status after a moment
-                _ = Task.Delay(2000).ContinueWith(_ =>
-                {
+                    await Task.Delay(500); // Brief delay for UI updates
+                    await StartQueueAsync();
+                    
+                    // Clear selections after auto-start
                     _uiDispatcher?.TryEnqueue(() => 
                     {
-                        if (StatusText.Contains("Opened folder"))
-                        {
-                            UpdateStatusText();
-                        }
+                        if (selectedGame != null) selectedGame.IsSelected = false;
+                        if (selectedSoftware != null) selectedSoftware.IsSelected = false;
+                        if (selectedDrive != null) selectedDrive.IsSelected = false;
+                        UpdateStatusText();
                     });
                 });
             }
-            catch (Exception ex)
+            
+            UpdateCommandStates();
+        }
+
+        private bool CanAddToQueue()
+        {
+            var selectedGame = Games.FirstOrDefault(g => g.IsSelected);
+            var selectedSoftware = Software.FirstOrDefault(s => s.IsSelected);
+            var selectedDrive = AvailableDrives.FirstOrDefault(d => d.IsSelected);
+            
+            return _queueViewModel.CanAddToQueue(selectedGame, selectedSoftware, selectedDrive);
+        }
+
+        private async Task StartQueueAsync()
+        {
+            bool success = await _queueViewModel.StartQueueAsync();
+            UpdateCommandStates();
+        }
+
+        private void ShowSettings()
+        {
+            RequestSettingsDialog?.Invoke(this, EventArgs.Empty);
+        }
+
+        public async Task RefreshDrivesAfterSettingsChange()
+        {
+            await LoadDrivesAsync();
+        }
+
+        // Event Handlers
+        private void OnDrivesUpdated(object? sender, List<Drive> drives)
+        {
+            _uiDispatcher?.TryEnqueue(() =>
             {
-                System.Diagnostics.Debug.WriteLine($"? Error opening folder in Explorer: {ex.Message}");
-                StatusText = $"? Error opening folder: {ex.Message}";
+                UpdateDriveListDirectly(drives);
+            });
+        }
+
+        private void OnGamesUpdated(object? sender, List<Game> games)
+        {
+            _uiDispatcher?.TryEnqueue(() =>
+            {
+                Games.Clear();
+                foreach (var game in games)
+                {
+                    game.PropertyChanged += OnGamePropertyChanged;
+                    Games.Add(game);
+                }
+                FilterGames();
+                UpdateStatusText();
+                OnPropertyChanged(nameof(GameSearchResultsText));
+            });
+        }
+
+        private void OnSoftwareUpdated(object? sender, List<Software> software)
+        {
+            _uiDispatcher?.TryEnqueue(() =>
+            {
+                Software.Clear();
+                foreach (var softwareItem in software)
+                {
+                    softwareItem.PropertyChanged += OnSoftwarePropertyChanged;
+                    Software.Add(softwareItem);
+                }
+                FilterSoftware();
+                UpdateStatusText();
+                OnPropertyChanged(nameof(SoftwareSearchResultsText));
+            });
+        }
+
+        private void OnStatusChanged(object? sender, string status)
+        {
+            _uiDispatcher?.TryEnqueue(() =>
+            {
+                StatusText = status;
+            });
+        }
+
+        private void OnQueuePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(QueueViewModel.OverallProgress))
+                OnPropertyChanged(nameof(OverallProgress));
+            else if (e.PropertyName == nameof(QueueViewModel.IsDeploymentRunning))
+                OnPropertyChanged(nameof(IsDeploymentRunning));
+        }
+
+        private void OnGamePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Game.IsSelected))
+            {
+                if (sender is Game selectedGame && selectedGame.IsSelected)
+                {
+                    // Clear other selections (radio button behavior)
+                    foreach (var game in Games.Where(g => g != selectedGame))
+                        game.IsSelected = false;
+                    foreach (var software in Software)
+                        software.IsSelected = false;
+                }
+                UpdateStatusText();
+                UpdateCommandStates();
             }
         }
 
+        private void OnSoftwarePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.Software.IsSelected))
+            {
+                if (sender is Models.Software selectedSoftware && selectedSoftware.IsSelected)
+                {
+                    // Clear other selections (radio button behavior)
+                    foreach (var software in Software.Where(s => s != selectedSoftware))
+                        software.IsSelected = false;
+                    foreach (var game in Games)
+                        game.IsSelected = false;
+                }
+                UpdateStatusText();
+                UpdateCommandStates();
+            }
+        }
+
+        private void OnDrivePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Drive.IsSelected))
+            {
+                if (sender is Drive selectedDrive && selectedDrive.IsSelected)
+                {
+                    // Clear other drive selections (radio button behavior)
+                    foreach (var drive in AvailableDrives.Where(d => d != selectedDrive))
+                        drive.IsSelected = false;
+                }
+                UpdateStatusText();
+                UpdateCommandStates();
+            }
+        }
+
+        private async void OnDriveMonitorTimer(object? sender, System.Timers.ElapsedEventArgs e)
+        {
+            if (!IsDeploymentRunning)
+            {
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("? MainViewModel: Backup drive monitoring...");
+                    await LoadDrivesAsync();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"? MainViewModel: Backup timer error - {ex.Message}");
+                }
+            }
+        }
+
+        // Helper Methods
         private void FilterGames()
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"?? FilterGames called with SearchText: '{SearchText}'");
-                
                 FilteredGames.Clear();
-                
                 var filtered = string.IsNullOrWhiteSpace(SearchText) 
                     ? Games 
-                    : _libraryService.SearchGames(SearchText);
-
-                System.Diagnostics.Debug.WriteLine($"?? FilterGames: Found {filtered.Count()} games matching '{SearchText}'");
+                    : _libraryManager.SearchGames(SearchText);
 
                 foreach (var game in filtered)
-                {
                     FilteredGames.Add(game);
-                }
                 
-                // Notify search results text changed
                 OnPropertyChanged(nameof(GameSearchResultsText));
-                
-                System.Diagnostics.Debug.WriteLine($"?? FilterGames completed: {FilteredGames.Count} games in filtered list");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? Error in FilterGames: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Error filtering games - {ex.Message}");
             }
         }
 
@@ -914,29 +595,19 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware called with SoftwareSearchText: '{SoftwareSearchText}'");
-                
                 FilteredSoftware.Clear();
-                
                 var filtered = string.IsNullOrWhiteSpace(SoftwareSearchText) 
                     ? Software 
-                    : _libraryService.SearchSoftware(SoftwareSearchText);
-
-                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware: Found {filtered.Count()} software matching '{SoftwareSearchText}'");
+                    : _libraryManager.SearchSoftware(SoftwareSearchText);
 
                 foreach (var softwareItem in filtered)
-                {
                     FilteredSoftware.Add(softwareItem);
-                }
                 
-                // Notify search results text changed
                 OnPropertyChanged(nameof(SoftwareSearchResultsText));
-                
-                System.Diagnostics.Debug.WriteLine($"?? FilterSoftware completed: {FilteredSoftware.Count} software in filtered list");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? Error in FilterSoftware: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Error filtering software - {ex.Message}");
             }
         }
 
@@ -952,7 +623,6 @@ namespace GameCopier.ViewModels
 
             if (hasSelectedItem && selectedDrive != null)
             {
-                var selectedItem = selectedGame ?? (object)selectedSoftware!;
                 var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
                 var itemSize = selectedGame?.SizeInBytes ?? selectedSoftware!.SizeInBytes;
                 var sizeText = FormatBytes(itemSize);
@@ -972,39 +642,60 @@ namespace GameCopier.ViewModels
             else
             {
                 var driveText = AvailableDrives.Count > 0 ? $"{AvailableDrives.Count} USB drives" : "No USB drives";
-                var eventText = _usbEventCount > 0 ? $" | {_usbEventCount} USB events detected" : "";
                 var recentText = mostRecentDrive != null ? $" | Most recent: {mostRecentDrive.DriveLetter}" : "";
-                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{eventText}{recentText}. USB-only monitoring active!";
+                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{recentText}";
             }
 
-            // Update command states based on selections
+            UpdateCommandStates();
+        }
+
+        private void UpdateDriveListDirectly(List<Drive> drives)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"?? UpdateDriveListDirectly: Processing {drives.Count} drives ON UI THREAD");
+                
+                if (drives.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("?? No drives provided to UpdateDriveListDirectly!");
+                    StatusText = "?? No USB drives detected - try refreshing or check settings";
+                    return;
+                }
+                
+                // Preserve selections
+                var previousSelections = AvailableDrives.Where(d => d.IsSelected).Select(d => d.DriveLetter).ToList();
+                System.Diagnostics.Debug.WriteLine($"?? Preserving selections for: {string.Join(", ", previousSelections)}");
+                
+                AvailableDrives.Clear();
+                System.Diagnostics.Debug.WriteLine("?? Cleared existing drives from UI");
+                
+                foreach (var drive in drives)
+                {
+                    drive.PropertyChanged += OnDrivePropertyChanged;
+                    
+                    if (previousSelections.Contains(drive.DriveLetter))
+                        drive.IsSelected = true;
+                        
+                    AvailableDrives.Add(drive);
+                    System.Diagnostics.Debug.WriteLine($"?? Added drive to UI: {drive.DriveLetter} - {drive.Name}");
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"?? UpdateDriveListDirectly: Complete - {AvailableDrives.Count} drives now in UI");
+                UpdateStatusText();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Error - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Stack trace - {ex.StackTrace}");
+                StatusText = $"? Error updating drive list: {ex.Message}";
+            }
+        }
+
+        private void UpdateCommandStates()
+        {
             ((RelayCommand)AddToQueueCommand).RaiseCanExecuteChanged();
-        }
-
-        private void OnJobUpdated(object? sender, DeploymentJob job)
-        {
-            // Update on UI thread using stored dispatcher
-            _uiDispatcher?.TryEnqueue(() =>
-            {
-                var existingJob = DeploymentJobs.FirstOrDefault(j => j.Id == job.Id);
-                if (existingJob == null)
-                {
-                    DeploymentJobs.Add(job);
-                }
-                else
-                {
-                    var index = DeploymentJobs.IndexOf(existingJob);
-                    DeploymentJobs[index] = job;
-                }
-            });
-        }
-
-        private void OnOverallProgressUpdated(object? sender, double progress)
-        {
-            _uiDispatcher?.TryEnqueue(() =>
-            {
-                OverallProgress = progress;
-            });
+            ((RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
         }
 
         private static string FormatBytes(long bytes)
@@ -1022,663 +713,21 @@ namespace GameCopier.ViewModels
             return $"{size:F1} {suffixes[suffixIndex]}";
         }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
+        public void Dispose()
+        {
+            System.Diagnostics.Debug.WriteLine("??? MainViewModel: Disposing...");
+            _driveMonitorTimer?.Stop();
+            _driveMonitorTimer?.Dispose();
+            _usbDriveManager?.Dispose();
+        }
 
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
-        public void Dispose()
-        {
-            System.Diagnostics.Debug.WriteLine("?? Disposing MainViewModel...");
-            _driveMonitorTimer?.Stop();
-            _driveMonitorTimer?.Dispose();
-            _usbDetectionService?.Dispose();
-        }
-
-        private void UpdateDriveListDirectly(List<Drive> drives)
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine($"?? UpdateDriveListDirectly: Processing {drives.Count} USB drives ON UI THREAD");
-                
-                // Preserve selection state when refreshing
-                var previousSelections = AvailableDrives.Where(d => d.IsSelected).Select(d => d.DriveLetter).ToList();
-                System.Diagnostics.Debug.WriteLine($"?? Preserving selections for: {string.Join(", ", previousSelections)}");
-                
-                AvailableDrives.Clear();
-                System.Diagnostics.Debug.WriteLine("?? Cleared existing drives");
-                
-                foreach (var drive in drives)
-                {
-                    // Subscribe to PropertyChanged to update command states
-                    drive.PropertyChanged += OnDrivePropertyChanged;
-                    
-                    // Restore selection if drive was previously selected
-                    if (previousSelections.Contains(drive.DriveLetter))
-                    {
-                        drive.IsSelected = true;
-                        System.Diagnostics.Debug.WriteLine($"?? Restored selection for drive: {drive.DriveLetter}");
-                    }
-                    AvailableDrives.Add(drive);
-                    
-                    var highlightStatus = drive.IsRecentlyPlugged ? " (HIGHLIGHTED)" : "";
-                    var brandInfo = !string.IsNullOrEmpty(drive.BrandName) ? $" - {drive.BrandName}" : "";
-                    System.Diagnostics.Debug.WriteLine($"?? Added drive: {drive.DriveLetter} - {drive.Name}{brandInfo}{highlightStatus}");
-                }
-                
-                UpdateStatusText();
-                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Complete - {AvailableDrives.Count} USB drives now in UI");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Error - {ex.Message}");
-            }
-        }
-
-        public async Task RefreshDrivesAfterSettingsChange()
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? Refreshing drives after settings change...");
-                
-                // Force reload drives with updated settings
-                await LoadDrivesAsync();
-                
-                System.Diagnostics.Debug.WriteLine("? Drive refresh completed after settings change");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? Error refreshing drives after settings change: {ex.Message}");
-                StatusText = $"? Error refreshing drives: {ex.Message}";
-            }
-        }
-
-        #region Queue Management
-
-        private void AddToQueue()
-        {
-            try
-            {
-                var selectedGame = Games.FirstOrDefault(g => g.IsSelected);
-                var selectedSoftware = Software.FirstOrDefault(s => s.IsSelected);
-                var selectedDrive = AvailableDrives.FirstOrDefault(d => d.IsSelected);
-
-                if (selectedGame == null && selectedSoftware == null)
-                {
-                    StatusText = "?? Please select a game or software to add to queue.";
-                    return;
-                }
-
-                if (selectedDrive == null)
-                {
-                    StatusText = "?? Please select a USB drive.";
-                    return;
-                }
-
-                var jobsAdded = 0;
-
-                // Create deployment job for the selected game
-                if (selectedGame != null)
-                {
-                    // Check if enough space is available
-                    if (selectedDrive.FreeSizeInBytes < selectedGame.SizeInBytes)
-                    {
-                        StatusText = $"?? Not enough space on {selectedDrive.Name} for {selectedGame.Name}";
-                        return;
-                    }
-
-                    var job = new DeploymentJob
-                    {
-                        Game = selectedGame,
-                        TargetDrive = selectedDrive,
-                        Status = DeploymentJobStatus.Pending
-                    };
-
-                    DeploymentJobs.Add(job);
-                    jobsAdded++;
-                    System.Diagnostics.Debug.WriteLine($"?? Added to queue: {selectedGame.Name} ? {selectedDrive.Name}");
-                }
-
-                // Add software support if enabled
-                if (selectedSoftware != null)
-                {
-                    // For now, create a dummy game from software
-                    var softwareAsGame = new Game
-                    {
-                        Name = selectedSoftware.Name,
-                        SizeInBytes = selectedSoftware.SizeInBytes,
-                        FolderPath = selectedSoftware.FolderPath
-                    };
-
-                    if (selectedDrive.FreeSizeInBytes < selectedSoftware.SizeInBytes)
-                    {
-                        StatusText = $"?? Not enough space on {selectedDrive.Name} for {selectedSoftware.Name}";
-                        return;
-                    }
-
-                    var job = new DeploymentJob
-                    {
-                        Game = softwareAsGame,
-                        TargetDrive = selectedDrive,
-                        Status = DeploymentJobStatus.Pending
-                    };
-
-                    DeploymentJobs.Add(job);
-                    jobsAdded++;
-                    System.Diagnostics.Debug.WriteLine($"?? Added to queue: {selectedSoftware.Name} ? {selectedDrive.Name}");
-                }
-
-                if (jobsAdded > 0)
-                {
-                    var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
-                    StatusText = $"? Added {itemName} to copy queue!";
-
-                    // Update command states
-                    ((RelayCommand)AddToQueueCommand).RaiseCanExecuteChanged();
-                    ((RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
-                    ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
-
-                    // ?? AUTO-START: Automatically start copying when adding to queue
-                    // Clear selections AFTER auto-start to avoid issues
-                    _ = Task.Run(async () => 
-                    {
-                        await AutoStartQueueAsync();
-                        
-                        // Clear selections after auto-start completes for better UX
-                        if (_uiDispatcher != null)
-                        {
-                            _uiDispatcher.TryEnqueue(() => 
-                            {
-                                if (selectedGame != null) selectedGame.IsSelected = false;
-                                if (selectedSoftware != null) selectedSoftware.IsSelected = false;
-                                selectedDrive.IsSelected = false;
-                                UpdateStatusText();
-                            });
-                        }
-                    });
-                }
-                else
-                {
-                    StatusText = "? No jobs could be added to queue (insufficient space).";
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error adding to queue: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in AddToQueue: {ex.Message}");
-            }
-        }
-
-        private async Task AutoStartQueueAsync()
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("?? AUTO-START: Beginning automatic queue execution...");
-                
-                // Wait a brief moment to ensure UI updates are complete
-                await Task.Delay(500);
-                
-                // Check if we're not already running and have pending jobs
-                if (IsDeploymentRunning)
-                {
-                    System.Diagnostics.Debug.WriteLine("?? AUTO-START: Deployment already running, skipping auto-start");
-                    return;
-                }
-                
-                var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
-                if (!pendingJobs.Any())
-                {
-                    System.Diagnostics.Debug.WriteLine("?? AUTO-START: No pending jobs found, skipping auto-start");
-                    return;
-                }
-                
-                System.Diagnostics.Debug.WriteLine($"?? AUTO-START: Found {pendingJobs.Count} pending jobs, starting deployment...");
-                
-                // Update UI on the dispatcher thread
-                if (_uiDispatcher != null)
-                {
-                    _uiDispatcher.TryEnqueue(() => 
-                    {
-                        StatusText = "?? Auto-starting copy process...";
-                    });
-                }
-                
-                // Start the queue
-                await StartQueueAsync();
-                
-                System.Diagnostics.Debug.WriteLine("? AUTO-START: Queue execution completed successfully");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"? AUTO-START ERROR: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? AUTO-START STACK TRACE: {ex.StackTrace}");
-                
-                // Update status on UI thread with more specific error
-                if (_uiDispatcher != null)
-                {
-                    _uiDispatcher.TryEnqueue(() => 
-                    {
-                        StatusText = $"? Auto-start failed: {ex.Message}";
-                    });
-                }
-            }
-        }
-
-        private async Task StartQueueAsync()
-        {
-            if (IsDeploymentRunning || !DeploymentJobs.Any()) return;
-
-            try
-            {
-                IsDeploymentRunning = true;
-                _driveMonitorTimer.Stop(); // Stop monitoring during deployment
-
-                var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
-                var totalJobs = pendingJobs.Count;
-
-                StatusText = $"?? Starting queue: {totalJobs} copy jobs...";
-                System.Diagnostics.Debug.WriteLine($"?? Starting queue deployment: {totalJobs} jobs");
-
-                // ?? FIXED: Process jobs directly instead of re-queuing them
-                // Start processing each job individually with real file operations
-                foreach (var job in pendingJobs)
-                {
-                    System.Diagnostics.Debug.WriteLine($"?? Processing job: {job.DisplayName}");
-                    
-                    // Update job status to InProgress
-                    job.Status = DeploymentJobStatus.InProgress;
-                    job.StartedAt = DateTime.Now;
-                    
-                    try
-                    {
-                        // Perform the actual file copy operation
-                        await CopyJobAsync(job);
-                        
-                        // Mark as completed
-                        job.Status = DeploymentJobStatus.Completed;
-                        job.Progress = 100.0;
-                        job.CompletedAt = DateTime.Now;
-                        
-                        System.Diagnostics.Debug.WriteLine($"? Job completed: {job.DisplayName}");
-                    }
-                    catch (Exception ex)
-                    {
-                        job.Status = DeploymentJobStatus.Failed;
-                        job.ErrorMessage = ex.Message;
-                        System.Diagnostics.Debug.WriteLine($"? Job failed: {job.DisplayName} - {ex.Message}");
-                    }
-                }
-
-                StatusText = "? Queue completed successfully!";
-                System.Diagnostics.Debug.WriteLine("? Queue deployment completed successfully");
-
-                // Update command states
-                ((RelayCommand)PauseQueueCommand).RaiseCanExecuteChanged();
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Queue deployment error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Queue deployment error: {ex.Message}");
-            }
-            finally
-            {
-                IsDeploymentRunning = false;
-                OverallProgress = 0;
-                _driveMonitorTimer.Start(); // Resume monitoring
-                
-                // Update command states
-                ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)PauseQueueCommand).RaiseCanExecuteChanged();
-            }
-        }
-
-        private async Task CopyJobAsync(DeploymentJob job)
-        {
-            var sourceDir = job.Game.FolderPath;
-            var targetDir = Path.Combine(job.TargetDrive.DriveLetter, job.Game.Name);
-
-            System.Diagnostics.Debug.WriteLine($"?? Copying from {sourceDir} to {targetDir}");
-
-            if (!Directory.Exists(sourceDir))
-            {
-                throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
-            }
-
-            // Initialize cancellation for this job
-            job.InitializeCancellation();
-
-            // Create target directory
-            Directory.CreateDirectory(targetDir);
-
-            // Get all files to copy
-            var files = Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories);
-            var totalFiles = files.Length;
-            var processedFiles = 0;
-
-            System.Diagnostics.Debug.WriteLine($"?? Found {totalFiles} files to copy");
-
-            // Copy each file with progress updates and cancellation support
-            foreach (var sourceFile in files)
-            {
-                // Check for cancellation before each file
-                job.CancellationToken.ThrowIfCancellationRequested();
-                
-                // Check for pause state
-                while (job.Status == DeploymentJobStatus.Paused)
-                {
-                    System.Diagnostics.Debug.WriteLine($"?? Job paused, waiting for resume: {job.DisplayName}");
-                    await Task.Delay(500, job.CancellationToken); // Wait while paused
-                }
-
-                var relativePath = Path.GetRelativePath(sourceDir, sourceFile);
-                var targetFile = Path.Combine(targetDir, relativePath);
-                var targetFileDir = Path.GetDirectoryName(targetFile);
-
-                if (!string.IsNullOrEmpty(targetFileDir))
-                {
-                    Directory.CreateDirectory(targetFileDir);
-                }
-
-                try
-                {
-                    // Use async streaming file copy to prevent UI freeze
-                    await CopyFileAsyncWithProgress(sourceFile, targetFile, job);
-                    
-                    processedFiles++;
-                    var progress = (double)processedFiles / totalFiles * 100;
-                    job.Progress = Math.Min(progress, 100.0);
-                    
-                    System.Diagnostics.Debug.WriteLine($"?? Copied file {processedFiles}/{totalFiles}: {relativePath} ({progress:F1}%)");
-                    
-                    // Small delay to allow UI updates and cancellation checks
-                    await Task.Delay(10, job.CancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    System.Diagnostics.Debug.WriteLine($"?? File copy cancelled: {relativePath}");
-                    throw;
-                }
-            }
-
-            System.Diagnostics.Debug.WriteLine($"? Successfully copied {processedFiles} files to {targetDir}");
-        }
-
-        /// <summary>
-        /// Async file copy with progress updates and cancellation support to prevent UI freezing
-        /// </summary>
-        private async Task CopyFileAsyncWithProgress(string sourceFile, string targetFile, DeploymentJob job)
-        {
-            const int bufferSize = 65536; // 64KB buffer for smooth progress
-            System.Diagnostics.Debug.WriteLine($"?? Starting async file copy: {sourceFile} ? {targetFile} ({bufferSize / 1024} KB buffer)");
-
-            using var sourceStream = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
-            using var targetStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, FileOptions.SequentialScan);
-            
-            var buffer = new byte[bufferSize];
-            long totalBytes = sourceStream.Length;
-            long copiedBytes = 0;
-            
-            while (copiedBytes < totalBytes)
-            {
-                // Check for cancellation
-                job.CancellationToken.ThrowIfCancellationRequested();
-                
-                // Check for pause state
-                while (job.Status == DeploymentJobStatus.Paused)
-                {
-                    await Task.Delay(100, job.CancellationToken);
-                }
-                
-                int bytesToRead = (int)Math.Min(bufferSize, totalBytes - copiedBytes);
-                int bytesRead = await sourceStream.ReadAsync(buffer, 0, bytesToRead, job.CancellationToken);
-                
-                if (bytesRead == 0)
-                    break;
-                    
-                await targetStream.WriteAsync(buffer, 0, bytesRead, job.CancellationToken);
-                copiedBytes += bytesRead;
-                
-                // Update progress more frequently for large files
-                if (totalBytes > 1024 * 1024) // Files larger than 1MB
-                {
-                    var fileProgress = (double)copiedBytes / totalBytes * 100;
-                    job.Progress = Math.Max(job.Progress, fileProgress);
-                    
-                    // Yield control back to UI thread periodically
-                    if (copiedBytes % (bufferSize * 10) == 0)
-                    {
-                        await Task.Delay(1, job.CancellationToken);
-                    }
-                }
-            }
-            
-            await targetStream.FlushAsync(job.CancellationToken);
-
-            System.Diagnostics.Debug.WriteLine($"? File copy completed: {targetFile} ({copiedBytes}/{totalBytes} bytes)");
-        }
-
-        private bool CanAddToQueue()
-        {
-            if (IsDeploymentRunning) return false;
-            
-            var hasSelectedItem = Games.Any(g => g.IsSelected) || Software.Any(s => s.IsSelected);
-            var hasSelectedDrive = AvailableDrives.Any(d => d.IsSelected);
-            
-            return hasSelectedItem && hasSelectedDrive;
-        }
-
-        private void RemoveFromQueue(DeploymentJob? job)
-        {
-            if (job == null) return;
-
-            try
-            {
-                if (job.Status == DeploymentJobStatus.InProgress)
-                {
-                    StatusText = "?? Cannot remove job that is currently in progress.";
-                    return;
-                }
-
-                DeploymentJobs.Remove(job);
-                StatusText = $"??? Removed {job.DisplayName} from queue";
-                System.Diagnostics.Debug.WriteLine($"??? Removed from queue: {job.DisplayName}");
-
-                // Update command states
-                ((RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error removing from queue: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in RemoveFromQueue: {ex.Message}");
-            }
-        }
-
-        private void ClearQueue()
-        {
-            try
-            {
-                if (IsDeploymentRunning)
-                {
-                    StatusText = "?? Cannot clear queue while deployment is running.";
-                    return;
-                }
-
-                var jobCount = DeploymentJobs.Count;
-                DeploymentJobs.Clear();
-                StatusText = $"??? Cleared {jobCount} jobs from queue";
-                System.Diagnostics.Debug.WriteLine($"??? Cleared queue: {jobCount} jobs removed");
-
-                // Update command states
-                ((RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error clearing queue: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in ClearQueue: {ex.Message}");
-            }
-        }
-
-        private bool CanStartQueue()
-        {
-            return !IsDeploymentRunning && DeploymentJobs.Any(j => j.Status == DeploymentJobStatus.Pending);
-        }
-
-        private void PauseQueue()
-        {
-            if (!IsDeploymentRunning) return;
-
-            try
-            {
-                _deploymentService.CancelAllJobs();
-                StatusText = "?? Queue paused by user.";
-                IsDeploymentRunning = false;
-                OverallProgress = 0;
-                _driveMonitorTimer.Start(); // Resume monitoring
-                System.Diagnostics.Debug.WriteLine("?? Queue paused by user");
-
-                // Update command states
-                ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)PauseQueueCommand).RaiseCanExecuteChanged();
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error pausing queue: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in PauseQueue: {ex.Message}");
-            }
-        }
-
-        #endregion
-
-        #region Individual Job Controls
-
-        private void PauseJob(DeploymentJob? job)
-        {
-            if (job == null || !job.CanPause) return;
-
-            try
-            {
-                job.Pause();
-                StatusText = $"?? Paused job: {job.DisplayName}";
-                System.Diagnostics.Debug.WriteLine($"?? User paused job: {job.DisplayName}");
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error pausing job: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in PauseJob: {ex.Message}");
-            }
-        }
-
-        private void ResumeJob(DeploymentJob? job)
-        {
-            if (job == null || !job.CanResume) return;
-
-            try
-            {
-                job.Resume();
-                StatusText = $"?? Resumed job: {job.DisplayName}";
-                System.Diagnostics.Debug.WriteLine($"?? User resumed job: {job.DisplayName}");
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error resuming job: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in ResumeJob: {ex.Message}");
-            }
-        }
-
-        private void CancelJob(DeploymentJob? job)
-        {
-            if (job == null || !job.CanCancel) return;
-
-            try
-            {
-                job.Cancel();
-                StatusText = $"?? Cancelled job: {job.DisplayName}";
-                System.Diagnostics.Debug.WriteLine($"?? User cancelled job: {job.DisplayName}");
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"? Error cancelling job: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? Error in CancelJob: {ex.Message}");
-            }
-        }
-
-        #endregion
-
-        private void OnGamePropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Game.IsSelected))
-            {
-                // Handle radio button behavior for games - only one can be selected
-                if (sender is Game selectedGame && selectedGame.IsSelected)
-                {
-                    // Clear other game selections
-                    foreach (var game in Games.Where(g => g != selectedGame))
-                    {
-                        game.IsSelected = false;
-                    }
-                    
-                    // Clear all software selections (mutual exclusion between games and software)
-                    foreach (var software in Software)
-                    {
-                        software.IsSelected = false;
-                    }
-                }
-                
-                UpdateStatusText();
-                System.Diagnostics.Debug.WriteLine($"?? Game selection changed, updating command states");
-            }
-        }
-
-        private void OnSoftwarePropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Models.Software.IsSelected))
-            {
-                // Handle radio button behavior for software - only one can be selected
-                if (sender is Models.Software selectedSoftware && selectedSoftware.IsSelected)
-                {
-                    // Clear other software selections
-                    foreach (var software in Software.Where(s => s != selectedSoftware))
-                    {
-                        software.IsSelected = false;
-                    }
-                    
-                    // Clear all game selections (mutual exclusion between games and software)
-                    foreach (var game in Games)
-                    {
-                        game.IsSelected = false;
-                    }
-                }
-                
-                UpdateStatusText();
-                System.Diagnostics.Debug.WriteLine($"?? Software selection changed, updating command states");
-            }
-        }
-
-        private void OnDrivePropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(Drive.IsSelected))
-            {
-                // Handle radio button behavior for drives - only one can be selected
-                if (sender is Drive selectedDrive && selectedDrive.IsSelected)
-                {
-                    // Clear other drive selections
-                    foreach (var drive in AvailableDrives.Where(d => d != selectedDrive))
-                    {
-                        drive.IsSelected = false;
-                    }
-                }
-                
-                UpdateStatusText();
-                System.Diagnostics.Debug.WriteLine($"?? Drive selection changed, updating command states");
-            }
-        }
     }
 
-    // Simple RelayCommand implementation
+    // RelayCommand implementations remain the same
     public class RelayCommand : ICommand
     {
         private readonly Action _execute;
@@ -1691,15 +740,11 @@ namespace GameCopier.ViewModels
         }
 
         public event EventHandler? CanExecuteChanged;
-
         public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
-
         public void Execute(object? parameter) => _execute();
-
         public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // Generic RelayCommand implementation
     public class RelayCommand<T> : ICommand
     {
         private readonly Action<T?> _execute;
@@ -1712,7 +757,7 @@ namespace GameCopier.ViewModels
         }
 
         public event EventHandler? CanExecuteChanged;
-
+        
         public bool CanExecute(object? parameter)
         {
             if (parameter is T typedParameter)

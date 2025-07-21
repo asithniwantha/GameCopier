@@ -59,14 +59,15 @@ namespace GameCopier.Services
                     if (drive.Name.ToUpper().StartsWith("C:"))
                         continue;
 
-                    if (drive.DriveType == DriveType.Removable)
+                    // Include both Removable and Fixed drives (many USB drives show as Fixed)
+                    if (drive.DriveType == DriveType.Removable || drive.DriveType == DriveType.Fixed)
                     {
                         drives.Add(drive.Name.TrimEnd('\\'));
                         System.Diagnostics.Debug.WriteLine($"🔍 Found USB drive: {drive.Name} - {drive.DriveType}");
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"🔍 Skipped non-removable drive: {drive.Name} - {drive.DriveType}");
+                        System.Diagnostics.Debug.WriteLine($"🔍 Skipped non-USB drive: {drive.Name} - {drive.DriveType}");
                     }
                 }
             }
