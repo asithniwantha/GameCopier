@@ -371,35 +371,50 @@ namespace GameCopier.ViewModels.Main
         {
             try
             {
-                StatusText = "🧪 Testing Windows copy dialog visibility...";
-                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing copy dialog");
+                StatusText = "🧪 Testing dual progress copy operation...";
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing dual progress copy");
 
                 // Create a temporary test setup
                 var tempSource = Path.Combine(Path.GetTempPath(), "GameCopierTest");
                 var tempTarget = Path.Combine(Path.GetTempPath(), "GameCopierTestTarget");
 
-                // Create test source directory with a small file
+                // Create test source directory with multiple files for better progress testing
                 Directory.CreateDirectory(tempSource);
-                var testFilePath = Path.Combine(tempSource, "test.txt");
-                await File.WriteAllTextAsync(testFilePath, "This is a test file for copy dialog testing.");
+                for (int i = 1; i <= 10; i++)
+                {
+                    var testFilePath = Path.Combine(tempSource, $"test{i}.txt");
+                    await File.WriteAllTextAsync(testFilePath, $"This is test file #{i} for dual progress testing. ".PadRight(1000, 'X'));
+                }
 
-                StatusText = "🧪 Test file created, attempting copy with dialog...";
+                StatusText = "🧪 Test files created, attempting dual progress copy operation...";
 
                 // Create status callback for real-time feedback
                 Action<string> statusCallback = (status) =>
                 {
                     _uiDispatcher?.TryEnqueue(() =>
                     {
-                        StatusText = $"🧪 Copy Dialog Test: {status}";
+                        StatusText = $"🧪 Dual Progress Test: {status}";
                     });
                 };
 
-                // Test the enhanced copy dialog
-                bool success = await Services.Business.FastCopyService.CopyDirectoryWithDialogNotificationAsync(
+                // Create progress callback for real-time progress updates
+                double testProgress = 0;
+                Action<double> progressCallback = (progress) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        testProgress = progress;
+                        StatusText = $"🧪 Dual Progress Test: {progress:F1}% complete";
+                    });
+                };
+
+                // Test the NEW dual progress method
+                bool success = await Services.Business.FastCopyService.CopyDirectoryWithDualProgressAsync(
                     tempSource,
                     tempTarget,
                     IntPtr.Zero,
                     statusCallback,
+                    progressCallback,
                     CancellationToken.None);
 
                 // Cleanup
@@ -412,23 +427,23 @@ namespace GameCopier.ViewModels.Main
 
                 if (success)
                 {
-                    StatusText = "✅ Copy dialog test completed successfully!";
+                    StatusText = $"✅ Dual progress test completed successfully! Final progress: {testProgress:F1}%";
                 }
                 else
                 {
-                    StatusText = "⚠️ Copy dialog test failed - dialog may not have appeared";
+                    StatusText = "⚠️ Dual progress test failed";
                 }
 
                 // Reset status after delay
-                await Task.Delay(3000);
+                await Task.Delay(5000);
                 UpdateStatusText();
 
-                System.Diagnostics.Debug.WriteLine($"🧪 MainViewModel: Copy dialog test completed - Success: {success}");
+                System.Diagnostics.Debug.WriteLine($"🧪 MainViewModel: Dual progress copy test completed - Success: {success}");
             }
             catch (Exception ex)
             {
-                StatusText = $"❌ Copy dialog test error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Copy dialog test error - {ex.Message}");
+                StatusText = $"❌ Dual progress test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Dual progress test error - {ex.Message}");
 
                 await Task.Delay(3000);
                 UpdateStatusText();
@@ -439,11 +454,11 @@ namespace GameCopier.ViewModels.Main
         {
             try
             {
-                StatusText = "🧪 Testing sequential copy dialogs (simulating real usage)...";
-                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing sequential copy dialogs");
+                StatusText = "🧪 Testing sequential dual progress operations...";
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing sequential dual progress operations");
 
                 // Create multiple test sources
-                var tempBase = Path.Combine(Path.GetTempPath(), "GameCopierSequentialTest");
+                var tempBase = Path.Combine(Path.GetTempPath(), "GameCopierDualProgressTest");
                 var testSources = new List<string>();
                 var testTargets = new List<string>();
 
@@ -453,45 +468,63 @@ namespace GameCopier.ViewModels.Main
                     var targetDir = Path.Combine(tempBase, $"Target{i}");
 
                     Directory.CreateDirectory(sourceDir);
-                    var testFilePath = Path.Combine(sourceDir, $"test{i}.txt");
-                    await File.WriteAllTextAsync(testFilePath, $"This is test file #{i} for sequential dialog testing.");
+                    
+                    // Create multiple files for better progress testing
+                    for (int j = 1; j <= 5; j++)
+                    {
+                        var testFilePath = Path.Combine(sourceDir, $"test{i}_{j}.txt");
+                        await File.WriteAllTextAsync(testFilePath, $"This is test file #{j} in source {i} for dual progress testing. ".PadRight(500, 'X'));
+                    }
 
                     testSources.Add(sourceDir);
                     testTargets.Add(targetDir);
                 }
 
-                StatusText = "🧪 Created 3 test sources, starting sequential copy tests...";
+                StatusText = "🧪 Created 3 test sources with multiple files, starting dual progress sequential tests...";
 
-                // Test sequential copies to simulate the real issue
+                // Test sequential copies with dual progress
                 for (int i = 0; i < testSources.Count; i++)
                 {
                     var operationNumber = i + 1;
-                    StatusText = $"🧪 Sequential Test {operationNumber}/3: Testing dialog visibility...";
+                    StatusText = $"🧪 Dual Progress Test {operationNumber}/3: Starting copy operation...";
+
+                    double testProgress = 0;
 
                     // Create status callback for real-time feedback
                     Action<string> statusCallback = (status) =>
                     {
                         _uiDispatcher?.TryEnqueue(() =>
                         {
-                            StatusText = $"🧪 Sequential Test {operationNumber}/3: {status}";
+                            StatusText = $"🧪 Dual Progress Test {operationNumber}/3: {status}";
                         });
                     };
 
-                    // Use the enhanced forced dialog method
-                    bool success = await Services.Business.FastCopyService.CopyDirectoryWithForcedDialogAsync(
+                    // Create progress callback for real-time progress updates
+                    Action<double> progressCallback = (progress) =>
+                    {
+                        _uiDispatcher?.TryEnqueue(() =>
+                        {
+                            testProgress = progress;
+                            StatusText = $"🧪 Dual Progress Test {operationNumber}/3: {progress:F1}% complete";
+                        });
+                    };
+
+                    // Use the NEW dual progress method
+                    bool success = await Services.Business.FastCopyService.CopyDirectoryWithDualProgressAsync(
                         testSources[i],
                         testTargets[i],
                         IntPtr.Zero,
                         statusCallback,
+                        progressCallback,
                         CancellationToken.None);
 
                     if (success)
                     {
-                        StatusText = $"✅ Sequential Test {operationNumber}/3: Dialog appeared and copy completed!";
+                        StatusText = $"✅ Dual Progress Test {operationNumber}/3: Copy completed successfully! Progress: {testProgress:F1}%";
                     }
                     else
                     {
-                        StatusText = $"❌ Sequential Test {operationNumber}/3: Copy failed or dialog didn't appear";
+                        StatusText = $"❌ Dual Progress Test {operationNumber}/3: Copy failed";
                     }
 
                     // Delay between operations to show results
@@ -505,18 +538,18 @@ namespace GameCopier.ViewModels.Main
                 }
                 catch { } // Ignore cleanup errors
 
-                StatusText = "✅ Sequential dialog test completed! All 3 operations should have shown dialogs.";
+                StatusText = "✅ Dual progress sequential test completed! All operations should have shown both visible progress and UI progress.";
 
                 // Reset status after delay
                 await Task.Delay(5000);
                 UpdateStatusText();
 
-                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Sequential copy dialog test completed");
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Dual progress sequential copy test completed");
             }
             catch (Exception ex)
             {
-                StatusText = $"❌ Sequential dialog test error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Sequential dialog test error - {ex.Message}");
+                StatusText = $"❌ Dual progress sequential test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Dual progress sequential test error - {ex.Message}");
 
                 await Task.Delay(3000);
                 UpdateStatusText();

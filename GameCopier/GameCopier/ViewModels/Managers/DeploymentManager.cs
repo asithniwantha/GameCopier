@@ -66,15 +66,26 @@ namespace GameCopier.ViewModels.Managers
                     });
                 };
 
+                // Create a progress callback for real-time progress updates
+                Action<double> progressCallback = (progress) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        job.Progress = progress;
+                        JobUpdated?.Invoke(this, job);
+                    });
+                };
+
                 // Initial status with detailed information
                 StatusChanged?.Invoke(this, $"🚀 Starting copy: {job.Game.Name} → {job.TargetDrive.DriveLetter}");
 
-                // Use enhanced Windows Explorer copy with better dialog control
-                bool success = await FastCopyService.CopyDirectoryWithDialogNotificationAsync(
+                // Use the NEW dual progress method that provides both visible progress AND UI updates
+                bool success = await FastCopyService.CopyDirectoryWithDualProgressAsync(
                     sourceDir,
                     targetDir,
                     IntPtr.Zero,
                     statusCallback,
+                    progressCallback,
                     System.Threading.CancellationToken.None);
 
                 // Update job status
@@ -89,7 +100,7 @@ namespace GameCopier.ViewModels.Managers
                 else
                 {
                     job.Status = DeploymentJobStatus.Failed;
-                    job.ErrorMessage = "Windows Explorer copy operation failed";
+                    job.ErrorMessage = "Enhanced copy operation failed";
                     StatusChanged?.Invoke(this, $"❌ Failed: {job.Game.Name} → {job.TargetDrive.DriveLetter}");
                     System.Diagnostics.Debug.WriteLine($"❌ Job failed: {job.DisplayName}");
                 }
@@ -230,7 +241,7 @@ namespace GameCopier.ViewModels.Managers
         }
 
         /// <summary>
-        /// Enhanced job processing with dialog control to ensure dialogs appear reliably
+        /// Enhanced job processing with guaranteed dialog visibility for each operation
         /// </summary>
         private async Task<bool> ProcessJobWithDialogControlAsync(DeploymentJob job)
         {
@@ -260,21 +271,32 @@ namespace GameCopier.ViewModels.Managers
                     });
                 };
 
-                // Enhanced status with operation number and dialog assurance
-                StatusChanged?.Invoke(this, $"🚀 Copy #{operationNumber} starting: {job.Game.Name} → {job.TargetDrive.DriveLetter} (Dialog guaranteed)");
+                // Create a progress callback for real-time progress updates
+                Action<double> progressCallback = (progress) =>
+                {
+                    _uiDispatcher?.TryEnqueue(() =>
+                    {
+                        job.Progress = progress;
+                        JobUpdated?.Invoke(this, job);
+                    });
+                };
 
-                // Strategic delay based on operation number to prevent API conflicts
-                var delayMs = Math.Min(500 + (operationNumber * 200), 2000); // Increasing delay, max 2s
+                // Enhanced status with operation number and dialog assurance
+                StatusChanged?.Invoke(this, $"🚀 Copy #{operationNumber} starting: {job.Game.Name} → {job.TargetDrive.DriveLetter} (Enhanced reliability with progress)");
+
+                // Strategic delay based on operation number to allow proper cleanup
+                var delayMs = Math.Min(500 + (operationNumber * 300), 2000);
                 await Task.Delay(delayMs);
 
-                System.Diagnostics.Debug.WriteLine($"📋 Copy #{operationNumber}: Starting with {delayMs}ms delay for dialog reliability");
+                System.Diagnostics.Debug.WriteLine($"📋 Copy #{operationNumber}: Starting with {delayMs}ms delay for reliability");
 
-                // Use enhanced copy method with forced dialog visibility
-                bool success = await FastCopyService.CopyDirectoryWithForcedDialogAsync(
+                // Use the NEW dual progress method that provides both visible progress AND UI updates
+                bool success = await FastCopyService.CopyDirectoryWithDualProgressAsync(
                     sourceDir,
                     targetDir,
                     IntPtr.Zero,
                     statusCallback,
+                    progressCallback,
                     System.Threading.CancellationToken.None);
 
                 // Update job status
@@ -289,7 +311,7 @@ namespace GameCopier.ViewModels.Managers
                 else
                 {
                     job.Status = DeploymentJobStatus.Failed;
-                    job.ErrorMessage = "Windows Explorer copy operation failed";
+                    job.ErrorMessage = "Enhanced copy operation failed";
                     StatusChanged?.Invoke(this, $"❌ Copy #{operationNumber} failed: {job.Game.Name} → {job.TargetDrive.DriveLetter}");
                     System.Diagnostics.Debug.WriteLine($"❌ Copy operation #{operationNumber} failed: {job.DisplayName}");
                 }

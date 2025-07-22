@@ -275,6 +275,15 @@
                         <TextBlock Text="DEBUG START" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Button>
+
+                <!-- Test sequential dialogs button -->
+                <Button Command="{Binding TestSequentialDialogsCommand}"
+                       Background="{ThemeResource SystemFillColorSolidNeutralBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <FontIcon Glyph="&#xE9F3;" FontSize="16" Margin="0,0,8,0"/>
+                        <TextBlock Text="TEST PROGRESS" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Grid>
     </Grid>
