@@ -1,3 +1,7 @@
+﻿using GameCopier.Models.Domain;
+using GameCopier.Services.Data;
+using GameCopier.ViewModels.Managers;
+using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,16 +11,11 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Timers;
 using System.Windows.Input;
-using GameCopier.Models;
-using GameCopier.Services;
-using GameCopier.ViewModels.Managers;
-using Microsoft.UI.Dispatching;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
-namespace GameCopier.ViewModels
+namespace GameCopier.ViewModels.Main
 {
     /// <summary>
     /// Simplified MainViewModel that orchestrates managers and handles UI coordination
@@ -29,8 +28,8 @@ namespace GameCopier.ViewModels
         private readonly DeploymentManager _deploymentManager;
         private readonly NavigationManager _navigationManager;
         private readonly SettingsService _settingsService;
-        private readonly QueueViewModel _queueViewModel;
-        
+        private readonly Queue.QueueViewModel _queueViewModel;
+
         // UI Threading
         private readonly DispatcherQueue? _uiDispatcher;
         private readonly System.Timers.Timer _driveMonitorTimer;
@@ -132,12 +131,13 @@ namespace GameCopier.ViewModels
         public ICommand ClearSoftwareSearchCommand { get; }
         public ICommand OpenGameFolderCommand { get; }
         public ICommand OpenSoftwareFolderCommand { get; }
-        
+
         // Queue commands
         public ICommand AddToQueueCommand { get; }
         public ICommand RemoveFromQueueCommand { get; }
         public ICommand ClearQueueCommand { get; }
         public ICommand StartQueueCommand { get; }
+        public ICommand DebugStartQueueCommand { get; } // Debug command to manually start queue
 
         // Events
         public event EventHandler? RequestSettingsDialog;
@@ -145,13 +145,13 @@ namespace GameCopier.ViewModels
 
         public MainViewModel()
         {
-            System.Diagnostics.Debug.WriteLine("?? MainViewModel: Initializing with modular architecture...");
-            
+            System.Diagnostics.Debug.WriteLine("🚀 MainViewModel: Initializing with modular architecture...");
+
             // Capture UI dispatcher
             _uiDispatcher = DispatcherQueue.GetForCurrentThread();
             if (_uiDispatcher == null)
             {
-                System.Diagnostics.Debug.WriteLine("? MainViewModel: Could not get UI dispatcher!");
+                System.Diagnostics.Debug.WriteLine("❌ MainViewModel: Could not get UI dispatcher!");
             }
 
             // Initialize services
@@ -162,7 +162,7 @@ namespace GameCopier.ViewModels
             _libraryManager = new LibraryManager();
             _deploymentManager = new DeploymentManager(_uiDispatcher);
             _navigationManager = new NavigationManager(_uiDispatcher);
-            _queueViewModel = new QueueViewModel(_deploymentManager);
+            _queueViewModel = new Queue.QueueViewModel(_deploymentManager);
 
             // Subscribe to manager events
             _usbDriveManager.DrivesUpdated += OnDrivesUpdated;
@@ -176,60 +176,62 @@ namespace GameCopier.ViewModels
             _queueViewModel.PropertyChanged += OnQueuePropertyChanged;
 
             // Initialize commands
-            LoadGamesCommand = new RelayCommand(async () => await LoadGamesAsync());
-            RefreshLibraryCommand = new RelayCommand(async () => await RefreshLibraryAsync());
-            LoadSoftwareCommand = new RelayCommand(async () => await LoadSoftwareAsync());
-            RefreshSoftwareLibraryCommand = new RelayCommand(async () => await RefreshSoftwareLibraryAsync());
-            LoadDrivesCommand = new RelayCommand(async () => await LoadDrivesAsync());
-            RefreshDrivesCommand = new RelayCommand(async () => await RefreshDrivesManuallyAsync());
-            ForceShowDrivesCommand = new RelayCommand(async () => await ForceShowDrivesAsync());
-            TestCopyDialogCommand = new RelayCommand(async () => await TestCopyDialogAsync());
-            TestSequentialDialogsCommand = new RelayCommand(async () => await TestSequentialDialogsAsync());
-            ShowSettingsCommand = new RelayCommand(ShowSettings);
-            AddGameFolderCommand = new RelayCommand(async () => await AddGameFolderAsync());
-            AddSoftwareFolderCommand = new RelayCommand(async () => await AddSoftwareFolderAsync());
-            ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
-            ClearSoftwareSearchCommand = new RelayCommand(() => SoftwareSearchText = string.Empty);
-            OpenGameFolderCommand = new RelayCommand<Game>(game => _navigationManager.OpenGameFolder(game));
-            OpenSoftwareFolderCommand = new RelayCommand<Software>(software => _navigationManager.OpenSoftwareFolder(software));
-            
+            LoadGamesCommand = new Base.RelayCommand(async () => await LoadGamesAsync());
+            RefreshLibraryCommand = new Base.RelayCommand(async () => await RefreshLibraryAsync());
+            LoadSoftwareCommand = new Base.RelayCommand(async () => await LoadSoftwareAsync());
+            RefreshSoftwareLibraryCommand = new Base.RelayCommand(async () => await RefreshSoftwareLibraryAsync());
+            LoadDrivesCommand = new Base.RelayCommand(async () => await LoadDrivesAsync());
+            RefreshDrivesCommand = new Base.RelayCommand(async () => await RefreshDrivesManuallyAsync());
+            ForceShowDrivesCommand = new Base.RelayCommand(async () => await ForceShowDrivesAsync());
+            TestCopyDialogCommand = new Base.RelayCommand(async () => await TestCopyDialogAsync());
+            TestSequentialDialogsCommand = new Base.RelayCommand(async () => await TestSequentialDialogsAsync());
+            ShowSettingsCommand = new Base.RelayCommand(ShowSettings);
+            AddGameFolderCommand = new Base.RelayCommand(async () => await AddGameFolderAsync());
+            AddSoftwareFolderCommand = new Base.RelayCommand(async () => await AddSoftwareFolderAsync());
+            ClearSearchCommand = new Base.RelayCommand(() => SearchText = string.Empty);
+            ClearSoftwareSearchCommand = new Base.RelayCommand(() => SoftwareSearchText = string.Empty);
+            OpenGameFolderCommand = new Base.RelayCommand<Game>(game => _navigationManager.OpenGameFolder(game));
+            OpenSoftwareFolderCommand = new Base.RelayCommand<Software>(software => _navigationManager.OpenSoftwareFolder(software));
+
             // Queue commands
-            AddToQueueCommand = new RelayCommand(AddToQueue, CanAddToQueue);
-            RemoveFromQueueCommand = new RelayCommand<DeploymentJob>(job => _queueViewModel.RemoveFromQueue(job));
-            ClearQueueCommand = new RelayCommand(() => _queueViewModel.ClearQueue(), () => DeploymentJobs.Count > 0);
-            StartQueueCommand = new RelayCommand(async () => await StartQueueAsync(), () => _queueViewModel.CanStartQueue());
+            AddToQueueCommand = new Base.RelayCommand(AddToQueue, CanAddToQueue);
+            RemoveFromQueueCommand = new Base.RelayCommand<DeploymentJob>(job => _queueViewModel.RemoveFromQueue(job));
+            ClearQueueCommand = new Base.RelayCommand(() => _queueViewModel.ClearQueue(), () => DeploymentJobs.Count > 0);
+            StartQueueCommand = new Base.RelayCommand(async () => await StartQueueAsync(), () => _queueViewModel.CanStartQueue());
+            DebugStartQueueCommand = new Base.RelayCommand(async () => await DebugStartQueueAsync()); // Debug command
 
             // Backup timer for drive monitoring
             _driveMonitorTimer = new System.Timers.Timer(30000); // 30 seconds
             _driveMonitorTimer.Elapsed += OnDriveMonitorTimer;
             _driveMonitorTimer.AutoReset = true;
 
-            System.Diagnostics.Debug.WriteLine("?? MainViewModel: Initialization complete");
-            
+            System.Diagnostics.Debug.WriteLine("✅ MainViewModel: Initialization complete");
+
             // Start initialization
             _ = Task.Run(async () => await InitializeAsync());
         }
 
+        // ...rest of the methods remain the same...
         private async Task InitializeAsync()
         {
             try
             {
-                StatusText = "?? Initializing GameDeploy Kiosk...";
-                
+                StatusText = "🚀 Initializing GameDeploy Kiosk...";
+
                 await LoadGamesAsync();
                 await LoadSoftwareAsync();
                 await LoadDrivesAsync();
-                
-                StatusText = "? Initialization complete - Ready for operation!";
+
+                StatusText = "✅ Initialization complete - Ready for operation!";
                 _driveMonitorTimer.Start();
-                
+
                 await Task.Delay(2000);
                 UpdateStatusText();
             }
             catch (Exception ex)
             {
-                StatusText = $"? Initialization error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Initialization error - {ex.Message}");
+                StatusText = $"❌ Initialization error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Initialization error - {ex.Message}");
                 _driveMonitorTimer.Start(); // Start timer anyway
             }
         }
@@ -268,33 +270,33 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                StatusText = "?? Manually refreshing USB drives...";
-                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Manual drive refresh requested");
-                
+                StatusText = "🔄 Manually refreshing USB drives...";
+                System.Diagnostics.Debug.WriteLine("🔄 MainViewModel: Manual drive refresh requested");
+
                 // Force a fresh load of drives
                 var drives = await _usbDriveManager.LoadDrivesAsync();
-                
+
                 if (drives.Count > 0)
                 {
-                    StatusText = $"? Found {drives.Count} drives";
+                    StatusText = $"✅ Found {drives.Count} drives";
                 }
                 else
                 {
-                    StatusText = "?? No drives found - check settings or connect a USB drive";
+                    StatusText = "⚠️ No drives found - check settings or connect a USB drive";
                 }
-                
+
                 // Update the UI regardless
                 _uiDispatcher?.TryEnqueue(() =>
                 {
                     UpdateDriveListDirectly(drives);
                 });
-                
-                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Manual refresh complete - {drives.Count} drives found");
+
+                System.Diagnostics.Debug.WriteLine($"🔄 MainViewModel: Manual refresh complete - {drives.Count} drives found");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Error refreshing drives: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Manual refresh error - {ex.Message}");
+                StatusText = $"❌ Error refreshing drives: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Manual refresh error - {ex.Message}");
             }
         }
 
@@ -302,21 +304,21 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                StatusText = "?? Force showing all available drives...";
-                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Force show drives requested");
-                
+                StatusText = "🔧 Force showing all available drives...";
+                System.Diagnostics.Debug.WriteLine("🔧 MainViewModel: Force show drives requested");
+
                 // Create a basic drive list that shows all non-C drives
                 var allDrives = System.IO.DriveInfo.GetDrives()
                     .Where(d => d.IsReady && !d.Name.ToUpper().StartsWith("C:"))
                     .ToList();
-                
+
                 var forcedDrives = new List<Drive>();
-                
+
                 foreach (var driveInfo in allDrives)
                 {
                     var drive = new Drive
                     {
-                        Name = $"?? {driveInfo.VolumeLabel ?? "Drive"} ({driveInfo.Name}) - FORCED",
+                        Name = $"🔧 {driveInfo.VolumeLabel ?? "Drive"} ({driveInfo.Name}) - FORCED",
                         DriveLetter = driveInfo.Name.TrimEnd('\\'),
                         Label = driveInfo.VolumeLabel ?? "Drive",
                         TotalSizeInBytes = driveInfo.TotalSize,
@@ -326,17 +328,17 @@ namespace GameCopier.ViewModels
                         DeviceDescription = $"Forced {driveInfo.DriveType} Drive",
                         FileSystem = driveInfo.DriveFormat ?? "Unknown"
                     };
-                    
+
                     forcedDrives.Add(drive);
-                    System.Diagnostics.Debug.WriteLine($"?? Forced drive: {drive.DriveLetter} - {drive.Name}");
+                    System.Diagnostics.Debug.WriteLine($"🔧 Forced drive: {drive.DriveLetter} - {drive.Name}");
                 }
-                
+
                 // If no drives found, create demo drives
                 if (forcedDrives.Count == 0)
                 {
                     forcedDrives.Add(new Drive
                     {
-                        Name = "?? TEST USB Drive (Demo)",
+                        Name = "🔧 TEST USB Drive (Demo)",
                         DriveLetter = "X:",
                         Label = "TEST_USB",
                         TotalSizeInBytes = 32L * 1024 * 1024 * 1024, // 32GB
@@ -347,21 +349,21 @@ namespace GameCopier.ViewModels
                         FileSystem = "NTFS"
                     });
                 }
-                
-                StatusText = $"?? Force showing {forcedDrives.Count} drives";
-                
+
+                StatusText = $"🔧 Force showing {forcedDrives.Count} drives";
+
                 // Update the UI
                 _uiDispatcher?.TryEnqueue(() =>
                 {
                     UpdateDriveListDirectly(forcedDrives);
                 });
-                
-                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Force show complete - {forcedDrives.Count} drives forced");
+
+                System.Diagnostics.Debug.WriteLine($"🔧 MainViewModel: Force show complete - {forcedDrives.Count} drives forced");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Error force showing drives: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Force show error - {ex.Message}");
+                StatusText = $"❌ Error force showing drives: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Force show error - {ex.Message}");
             }
         }
 
@@ -369,37 +371,37 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                StatusText = "?? Testing Windows copy dialog visibility...";
-                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Testing copy dialog");
-                
+                StatusText = "🧪 Testing Windows copy dialog visibility...";
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing copy dialog");
+
                 // Create a temporary test setup
                 var tempSource = Path.Combine(Path.GetTempPath(), "GameCopierTest");
                 var tempTarget = Path.Combine(Path.GetTempPath(), "GameCopierTestTarget");
-                
+
                 // Create test source directory with a small file
                 Directory.CreateDirectory(tempSource);
                 var testFilePath = Path.Combine(tempSource, "test.txt");
                 await File.WriteAllTextAsync(testFilePath, "This is a test file for copy dialog testing.");
-                
-                StatusText = "?? Test file created, attempting copy with dialog...";
-                
+
+                StatusText = "🧪 Test file created, attempting copy with dialog...";
+
                 // Create status callback for real-time feedback
                 Action<string> statusCallback = (status) =>
                 {
                     _uiDispatcher?.TryEnqueue(() =>
                     {
-                        StatusText = $"?? Copy Dialog Test: {status}";
+                        StatusText = $"🧪 Copy Dialog Test: {status}";
                     });
                 };
-                
+
                 // Test the enhanced copy dialog
-                bool success = await Services.FastCopyService.CopyDirectoryWithDialogNotificationAsync(
+                bool success = await Services.Business.FastCopyService.CopyDirectoryWithDialogNotificationAsync(
                     tempSource,
                     tempTarget,
                     IntPtr.Zero,
                     statusCallback,
                     CancellationToken.None);
-                
+
                 // Cleanup
                 try
                 {
@@ -407,27 +409,27 @@ namespace GameCopier.ViewModels
                     if (Directory.Exists(tempTarget)) Directory.Delete(tempTarget, true);
                 }
                 catch { } // Ignore cleanup errors
-                
+
                 if (success)
                 {
-                    StatusText = "? Copy dialog test completed successfully!";
+                    StatusText = "✅ Copy dialog test completed successfully!";
                 }
                 else
                 {
-                    StatusText = "?? Copy dialog test failed - dialog may not have appeared";
+                    StatusText = "⚠️ Copy dialog test failed - dialog may not have appeared";
                 }
-                
+
                 // Reset status after delay
                 await Task.Delay(3000);
                 UpdateStatusText();
-                
-                System.Diagnostics.Debug.WriteLine($"?? MainViewModel: Copy dialog test completed - Success: {success}");
+
+                System.Diagnostics.Debug.WriteLine($"🧪 MainViewModel: Copy dialog test completed - Success: {success}");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Copy dialog test error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Copy dialog test error - {ex.Message}");
-                
+                StatusText = $"❌ Copy dialog test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Copy dialog test error - {ex.Message}");
+
                 await Task.Delay(3000);
                 UpdateStatusText();
             }
@@ -437,90 +439,90 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                StatusText = "?? Testing sequential copy dialogs (simulating real usage)...";
-                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Testing sequential copy dialogs");
-                
+                StatusText = "🧪 Testing sequential copy dialogs (simulating real usage)...";
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Testing sequential copy dialogs");
+
                 // Create multiple test sources
                 var tempBase = Path.Combine(Path.GetTempPath(), "GameCopierSequentialTest");
                 var testSources = new List<string>();
                 var testTargets = new List<string>();
-                
+
                 for (int i = 1; i <= 3; i++)
                 {
                     var sourceDir = Path.Combine(tempBase, $"Source{i}");
                     var targetDir = Path.Combine(tempBase, $"Target{i}");
-                    
+
                     Directory.CreateDirectory(sourceDir);
                     var testFilePath = Path.Combine(sourceDir, $"test{i}.txt");
                     await File.WriteAllTextAsync(testFilePath, $"This is test file #{i} for sequential dialog testing.");
-                    
+
                     testSources.Add(sourceDir);
                     testTargets.Add(targetDir);
                 }
-                
-                StatusText = "?? Created 3 test sources, starting sequential copy tests...";
-                
+
+                StatusText = "🧪 Created 3 test sources, starting sequential copy tests...";
+
                 // Test sequential copies to simulate the real issue
                 for (int i = 0; i < testSources.Count; i++)
                 {
                     var operationNumber = i + 1;
-                    StatusText = $"?? Sequential Test {operationNumber}/3: Testing dialog visibility...";
-                    
+                    StatusText = $"🧪 Sequential Test {operationNumber}/3: Testing dialog visibility...";
+
                     // Create status callback for real-time feedback
                     Action<string> statusCallback = (status) =>
                     {
                         _uiDispatcher?.TryEnqueue(() =>
                         {
-                            StatusText = $"?? Sequential Test {operationNumber}/3: {status}";
+                            StatusText = $"🧪 Sequential Test {operationNumber}/3: {status}";
                         });
                     };
-                    
+
                     // Use the enhanced forced dialog method
-                    bool success = await Services.FastCopyService.CopyDirectoryWithForcedDialogAsync(
+                    bool success = await Services.Business.FastCopyService.CopyDirectoryWithForcedDialogAsync(
                         testSources[i],
                         testTargets[i],
                         IntPtr.Zero,
                         statusCallback,
                         CancellationToken.None);
-                    
+
                     if (success)
                     {
-                        StatusText = $"? Sequential Test {operationNumber}/3: Dialog appeared and copy completed!";
+                        StatusText = $"✅ Sequential Test {operationNumber}/3: Dialog appeared and copy completed!";
                     }
                     else
                     {
-                        StatusText = $"? Sequential Test {operationNumber}/3: Copy failed or dialog didn't appear";
+                        StatusText = $"❌ Sequential Test {operationNumber}/3: Copy failed or dialog didn't appear";
                     }
-                    
+
                     // Delay between operations to show results
                     await Task.Delay(2000);
                 }
-                
+
                 // Cleanup
                 try
                 {
                     if (Directory.Exists(tempBase)) Directory.Delete(tempBase, true);
                 }
                 catch { } // Ignore cleanup errors
-                
-                StatusText = "? Sequential dialog test completed! All 3 operations should have shown dialogs.";
-                
+
+                StatusText = "✅ Sequential dialog test completed! All 3 operations should have shown dialogs.";
+
                 // Reset status after delay
                 await Task.Delay(5000);
                 UpdateStatusText();
-                
-                System.Diagnostics.Debug.WriteLine("?? MainViewModel: Sequential copy dialog test completed");
+
+                System.Diagnostics.Debug.WriteLine("🧪 MainViewModel: Sequential copy dialog test completed");
             }
             catch (Exception ex)
             {
-                StatusText = $"? Sequential dialog test error: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Sequential dialog test error - {ex.Message}");
-                
+                StatusText = $"❌ Sequential dialog test error: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Sequential dialog test error - {ex.Message}");
+
                 await Task.Delay(3000);
                 UpdateStatusText();
             }
         }
-        
+
         private async Task AddGameFolderAsync()
         {
             var folderPicker = new FolderPicker();
@@ -562,26 +564,55 @@ namespace GameCopier.ViewModels
             var selectedDrive = AvailableDrives.FirstOrDefault(d => d.IsSelected);
 
             bool success = _queueViewModel.AddToQueue(selectedGame, selectedSoftware, selectedDrive);
-            
+
             if (success)
             {
-                // Auto-start queue
-                _ = Task.Run(async () => 
+                var itemName = selectedGame?.Name ?? selectedSoftware?.Name ?? "Unknown";
+                System.Diagnostics.Debug.WriteLine($"🚀 MainViewModel: Successfully added {itemName} to queue, attempting auto-start...");
+                
+                // Auto-start queue with better error handling
+                _ = Task.Run(async () =>
                 {
-                    await Task.Delay(500); // Brief delay for UI updates
-                    await StartQueueAsync();
-                    
-                    // Clear selections after auto-start
-                    _uiDispatcher?.TryEnqueue(() => 
+                    try
                     {
-                        if (selectedGame != null) selectedGame.IsSelected = false;
-                        if (selectedSoftware != null) selectedSoftware.IsSelected = false;
-                        if (selectedDrive != null) selectedDrive.IsSelected = false;
-                        UpdateStatusText();
-                    });
+                        await Task.Delay(500); // Brief delay for UI updates
+                        System.Diagnostics.Debug.WriteLine($"🚀 MainViewModel: Starting auto-start for {itemName}...");
+                        
+                        bool startSuccess = await StartQueueAsync();
+                        System.Diagnostics.Debug.WriteLine($"🚀 MainViewModel: Auto-start result for {itemName}: {startSuccess}");
+                        
+                        if (!startSuccess)
+                        {
+                            _uiDispatcher?.TryEnqueue(() =>
+                            {
+                                StatusText = $"⚠️ {itemName} added to queue but auto-start failed. Click the item in the queue to manually start.";
+                            });
+                        }
+
+                        // Clear selections after auto-start attempt
+                        _uiDispatcher?.TryEnqueue(() =>
+                        {
+                            if (selectedGame != null) selectedGame.IsSelected = false;
+                            if (selectedSoftware != null) selectedSoftware.IsSelected = false;
+                            if (selectedDrive != null) selectedDrive.IsSelected = false;
+                            UpdateStatusText();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Auto-start error for {itemName}: {ex.Message}");
+                        _uiDispatcher?.TryEnqueue(() =>
+                        {
+                            StatusText = $"❌ Auto-start failed for {itemName}: {ex.Message}. Check queue manually.";
+                        });
+                    }
                 });
             }
-            
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("❌ MainViewModel: Failed to add item to queue");
+            }
+
             UpdateCommandStates();
         }
 
@@ -590,14 +621,82 @@ namespace GameCopier.ViewModels
             var selectedGame = Games.FirstOrDefault(g => g.IsSelected);
             var selectedSoftware = Software.FirstOrDefault(s => s.IsSelected);
             var selectedDrive = AvailableDrives.FirstOrDefault(d => d.IsSelected);
-            
+
             return _queueViewModel.CanAddToQueue(selectedGame, selectedSoftware, selectedDrive);
         }
 
-        private async Task StartQueueAsync()
+        private async Task<bool> StartQueueAsync()
         {
-            bool success = await _queueViewModel.StartQueueAsync();
-            UpdateCommandStates();
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("🚀 MainViewModel: StartQueueAsync called");
+                
+                if (!_queueViewModel.CanStartQueue())
+                {
+                    System.Diagnostics.Debug.WriteLine("❌ MainViewModel: CanStartQueue returned false");
+                    var reason = IsDeploymentRunning ? "deployment already running" : "no pending jobs";
+                    System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Reason: {reason}");
+                    return false;
+                }
+                
+                System.Diagnostics.Debug.WriteLine("✅ MainViewModel: Starting queue execution...");
+                bool success = await _queueViewModel.StartQueueAsync();
+                System.Diagnostics.Debug.WriteLine($"🚀 MainViewModel: Queue execution result: {success}");
+                
+                UpdateCommandStates();
+                return success;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: StartQueueAsync exception: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Stack trace: {ex.StackTrace}");
+                return false;
+            }
+        }
+
+        private async Task DebugStartQueueAsync()
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine("🐛 MainViewModel: DEBUG - Force starting queue...");
+                StatusText = "🐛 DEBUG: Force starting queue...";
+                
+                // Force debug information
+                System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: Current queue count: {DeploymentJobs.Count}");
+                System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: IsDeploymentRunning: {IsDeploymentRunning}");
+                System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: CanStartQueue: {_queueViewModel.CanStartQueue()}");
+                
+                var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
+                System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: Pending jobs: {pendingJobs.Count}");
+                
+                foreach (var job in pendingJobs)
+                {
+                    System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: Job - {job.DisplayName} ({job.Status})");
+                }
+                
+                if (pendingJobs.Any())
+                {
+                    bool success = await _queueViewModel.StartQueueAsync();
+                    StatusText = $"🐛 DEBUG: Queue start result: {success}";
+                    System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: Force start result: {success}");
+                }
+                else
+                {
+                    StatusText = "🐛 DEBUG: No pending jobs to start";
+                    System.Diagnostics.Debug.WriteLine("🐛 DEBUG: No pending jobs found");
+                }
+                
+                await Task.Delay(3000);
+                UpdateStatusText();
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"🐛 DEBUG: Error - {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"🐛 DEBUG: Exception - {ex.Message}");
+                
+                await Task.Delay(3000);
+                UpdateStatusText();
+            }
         }
 
         private void ShowSettings()
@@ -661,11 +760,11 @@ namespace GameCopier.ViewModels
 
         private void OnQueuePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(QueueViewModel.OverallProgress))
+            if (e.PropertyName == nameof(Queue.QueueViewModel.OverallProgress))
                 OnPropertyChanged(nameof(OverallProgress));
-            else if (e.PropertyName == nameof(QueueViewModel.IsDeploymentRunning))
+            else if (e.PropertyName == nameof(Queue.QueueViewModel.IsDeploymentRunning))
                 OnPropertyChanged(nameof(IsDeploymentRunning));
-            
+
             // Always update queue analysis when queue changes
             OnPropertyChanged(nameof(QueueAnalysis));
         }
@@ -689,9 +788,9 @@ namespace GameCopier.ViewModels
 
         private void OnSoftwarePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(Models.Software.IsSelected))
+            if (e.PropertyName == "IsSelected")
             {
-                if (sender is Models.Software selectedSoftware && selectedSoftware.IsSelected)
+                if (sender is Software selectedSoftware && selectedSoftware.IsSelected)
                 {
                     // Clear other selections (radio button behavior)
                     foreach (var software in Software.Where(s => s != selectedSoftware))
@@ -725,12 +824,12 @@ namespace GameCopier.ViewModels
             {
                 try
                 {
-                    System.Diagnostics.Debug.WriteLine("? MainViewModel: Backup drive monitoring...");
+                    System.Diagnostics.Debug.WriteLine("⏰ MainViewModel: Backup drive monitoring...");
                     await LoadDrivesAsync();
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"? MainViewModel: Backup timer error - {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Backup timer error - {ex.Message}");
                 }
             }
         }
@@ -741,18 +840,18 @@ namespace GameCopier.ViewModels
             try
             {
                 FilteredGames.Clear();
-                var filtered = string.IsNullOrWhiteSpace(SearchText) 
-                    ? Games 
+                var filtered = string.IsNullOrWhiteSpace(SearchText)
+                    ? Games
                     : _libraryManager.SearchGames(SearchText);
 
                 foreach (var game in filtered)
                     FilteredGames.Add(game);
-                
+
                 OnPropertyChanged(nameof(GameSearchResultsText));
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Error filtering games - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Error filtering games - {ex.Message}");
             }
         }
 
@@ -761,18 +860,18 @@ namespace GameCopier.ViewModels
             try
             {
                 FilteredSoftware.Clear();
-                var filtered = string.IsNullOrWhiteSpace(SoftwareSearchText) 
-                    ? Software 
+                var filtered = string.IsNullOrWhiteSpace(SoftwareSearchText)
+                    ? Software
                     : _libraryManager.SearchSoftware(SoftwareSearchText);
 
                 foreach (var softwareItem in filtered)
                     FilteredSoftware.Add(softwareItem);
-                
+
                 OnPropertyChanged(nameof(SoftwareSearchResultsText));
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? MainViewModel: Error filtering software - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ MainViewModel: Error filtering software - {ex.Message}");
             }
         }
 
@@ -791,25 +890,25 @@ namespace GameCopier.ViewModels
                 var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
                 var itemSize = selectedGame?.SizeInBytes ?? selectedSoftware!.SizeInBytes;
                 var sizeText = FormatBytes(itemSize);
-                StatusText = $"? {itemName} ({sizeText}) selected for {selectedDrive.Name}. Windows copy dialog will appear during copy.";
+                StatusText = $"🎯 {itemName} ({sizeText}) selected for {selectedDrive.Name}. Windows copy dialog will appear during copy.";
             }
             else if (hasSelectedItem)
             {
                 var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
                 var itemSize = selectedGame?.SizeInBytes ?? selectedSoftware!.SizeInBytes;
                 var sizeText = FormatBytes(itemSize);
-                StatusText = $"?? {itemName} ({sizeText}) selected. Please select a USB drive.";
+                StatusText = $"⚠️ {itemName} ({sizeText}) selected. Please select a USB drive.";
             }
             else if (selectedDrive != null)
             {
-                StatusText = $"?? {selectedDrive.Name} selected. Please select a game or software to deploy.";
+                StatusText = $"⚠️ {selectedDrive.Name} selected. Please select a game or software to deploy.";
             }
             else
             {
                 var driveText = AvailableDrives.Count > 0 ? $"{AvailableDrives.Count} USB drives" : "No USB drives";
                 var recentText = mostRecentDrive != null ? $" | Most recent: {mostRecentDrive.DriveLetter}" : "";
                 var copyInfo = IsDeploymentRunning ? " | Copy operations running in background" : "";
-                StatusText = $"?? {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{recentText}{copyInfo}";
+                StatusText = $"📊 {totalItems} items available ({Games.Count} games, {Software.Count} software), {driveText} detected{recentText}{copyInfo}";
             }
 
             UpdateCommandStates();
@@ -819,49 +918,50 @@ namespace GameCopier.ViewModels
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"?? UpdateDriveListDirectly: Processing {drives.Count} drives ON UI THREAD");
-                
+                System.Diagnostics.Debug.WriteLine($"📋 UpdateDriveListDirectly: Processing {drives.Count} drives ON UI THREAD");
+
                 if (drives.Count == 0)
                 {
-                    System.Diagnostics.Debug.WriteLine("?? No drives provided to UpdateDriveListDirectly!");
-                    StatusText = "?? No USB drives detected - try refreshing or check settings";
+                    System.Diagnostics.Debug.WriteLine("⚠️ No drives provided to UpdateDriveListDirectly!");
+                    StatusText = "⚠️ No USB drives detected - try refreshing or check settings";
                     return;
                 }
-                
+
                 // Preserve selections
                 var previousSelections = AvailableDrives.Where(d => d.IsSelected).Select(d => d.DriveLetter).ToList();
-                System.Diagnostics.Debug.WriteLine($"?? Preserving selections for: {string.Join(", ", previousSelections)}");
-                
+                System.Diagnostics.Debug.WriteLine($"📋 Preserving selections for: {string.Join(", ", previousSelections)}");
+
                 AvailableDrives.Clear();
-                System.Diagnostics.Debug.WriteLine("?? Cleared existing drives from UI");
-                
+                System.Diagnostics.Debug.WriteLine("📋 Cleared existing drives from UI");
+
                 foreach (var drive in drives)
                 {
                     drive.PropertyChanged += OnDrivePropertyChanged;
-                    
+
                     if (previousSelections.Contains(drive.DriveLetter))
                         drive.IsSelected = true;
-                        
+
                     AvailableDrives.Add(drive);
-                    System.Diagnostics.Debug.WriteLine($"?? Added drive to UI: {drive.DriveLetter} - {drive.Name}");
+                    System.Diagnostics.Debug.WriteLine($"📋 Added drive to UI: {drive.DriveLetter} - {drive.Name}");
                 }
-                
-                System.Diagnostics.Debug.WriteLine($"?? UpdateDriveListDirectly: Complete - {AvailableDrives.Count} drives now in UI");
+
+                System.Diagnostics.Debug.WriteLine($"📋 UpdateDriveListDirectly: Complete - {AvailableDrives.Count} drives now in UI");
                 UpdateStatusText();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Error - {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? UpdateDriveListDirectly: Stack trace - {ex.StackTrace}");
-                StatusText = $"? Error updating drive list: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"❌ UpdateDriveListDirectly: Error - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ UpdateDriveListDirectly: Stack trace - {ex.StackTrace}");
+                StatusText = $"❌ Error updating drive list: {ex.Message}";
             }
         }
 
         private void UpdateCommandStates()
         {
-            ((RelayCommand)AddToQueueCommand).RaiseCanExecuteChanged();
-            ((RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
-            ((RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
+            ((Base.RelayCommand)AddToQueueCommand).RaiseCanExecuteChanged();
+            ((Base.RelayCommand)ClearQueueCommand).RaiseCanExecuteChanged();
+            ((Base.RelayCommand)StartQueueCommand).RaiseCanExecuteChanged();
+            ((Base.RelayCommand)DebugStartQueueCommand).RaiseCanExecuteChanged();
         }
 
         private static string FormatBytes(long bytes)
@@ -881,7 +981,7 @@ namespace GameCopier.ViewModels
 
         public void Dispose()
         {
-            System.Diagnostics.Debug.WriteLine("??? MainViewModel: Disposing...");
+            System.Diagnostics.Debug.WriteLine("🗑️ MainViewModel: Disposing...");
             _driveMonitorTimer?.Stop();
             _driveMonitorTimer?.Dispose();
             _usbDriveManager?.Dispose();
@@ -891,56 +991,5 @@ namespace GameCopier.ViewModels
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-    }
-
-    // RelayCommand implementations remain the same
-    public class RelayCommand : ICommand
-    {
-        private readonly Action _execute;
-        private readonly Func<bool>? _canExecute;
-
-        public RelayCommand(Action execute, Func<bool>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler? CanExecuteChanged;
-        public bool CanExecute(object? parameter) => _canExecute?.Invoke() ?? true;
-        public void Execute(object? parameter) => _execute();
-        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    public class RelayCommand<T> : ICommand
-    {
-        private readonly Action<T?> _execute;
-        private readonly Func<T?, bool>? _canExecute;
-
-        public RelayCommand(Action<T?> execute, Func<T?, bool>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler? CanExecuteChanged;
-        
-        public bool CanExecute(object? parameter)
-        {
-            if (parameter is T typedParameter)
-                return _canExecute?.Invoke(typedParameter) ?? true;
-            if (parameter == null && !typeof(T).IsValueType)
-                return _canExecute?.Invoke(default(T)) ?? true;
-            return false;
-        }
-
-        public void Execute(object? parameter)
-        {
-            if (parameter is T typedParameter)
-                _execute(typedParameter);
-            else if (parameter == null && !typeof(T).IsValueType)
-                _execute(default(T));
-        }
-
-        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 }

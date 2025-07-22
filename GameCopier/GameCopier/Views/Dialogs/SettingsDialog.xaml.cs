@@ -1,17 +1,17 @@
-using Microsoft.UI.Xaml.Controls;
+﻿using GameCopier.Services.Data;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
-using GameCopier.Services;
-using System.Linq;
-using Windows.Storage;
-using System.Collections.Generic;
-using System.IO;
-using System;
 
-namespace GameCopier
+namespace GameCopier.Views.Dialogs
 {
     public sealed partial class SettingsDialog : ContentDialog
     {
@@ -21,8 +21,8 @@ namespace GameCopier
         private ObservableCollection<string> _softwareFolders;
         private StackPanel _foldersPanel = new();
         private StackPanel _driveSettingsPanel = new();
-        private StackPanel _gamesFoldersPanel;
-        private StackPanel _softwareFoldersPanel;
+        private StackPanel _gamesFoldersPanel = new();
+        private StackPanel _softwareFoldersPanel = new();
 
         public SettingsDialog()
         {
@@ -30,7 +30,7 @@ namespace GameCopier
             this.Title = "Settings";
             this.PrimaryButtonText = "Close";
             this.PrimaryButtonClick += SettingsDialog_PrimaryButtonClick;
-            
+
             _libraryService = new LibraryService();
             _settingsService = new SettingsService();
             _gameFolders = new ObservableCollection<string>(_libraryService.GetGameFolders());
@@ -58,51 +58,52 @@ namespace GameCopier
             Content = scrollViewer;
         }
 
+        // ...existing code... (all the other methods remain the same)
         private StackPanel CreateLibrarySection()
         {
             var section = new StackPanel();
-            var header = new TextBlock 
-            { 
-                Text = "Library Folders:", 
+            var header = new TextBlock
+            {
+                Text = "Library Folders:",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 FontSize = 16,
-                Margin = new Thickness(0,0,0,8) 
+                Margin = new Thickness(0, 0, 0, 8)
             };
             section.Children.Add(header);
 
             // Create TabView for Games and Software folders
             var tabView = new TabView();
-            
+
             // Games Tab
             var gamesTab = new TabViewItem { Header = "Game Folders" };
             _gamesFoldersPanel = new StackPanel();
             RefreshGameFoldersPanel(_gamesFoldersPanel);
-            var addGameButton = new Button 
-            { 
-                Content = "Add Game Folder", 
-                Margin = new Thickness(0,8,0,0) 
+            var addGameButton = new Button
+            {
+                Content = "Add Game Folder",
+                Margin = new Thickness(0, 8, 0, 0)
             };
             addGameButton.Click += async (s, e) => await AddGameFolderAsync();
             var gamesContent = new StackPanel();
             gamesContent.Children.Add(_gamesFoldersPanel);
             gamesContent.Children.Add(addGameButton);
             gamesTab.Content = gamesContent;
-            
+
             // Software Tab
             var softwareTab = new TabViewItem { Header = "Software Folders" };
             _softwareFoldersPanel = new StackPanel();
             RefreshSoftwareFoldersPanel(_softwareFoldersPanel);
-            var addSoftwareButton = new Button 
-            { 
-                Content = "Add Software Folder", 
-                Margin = new Thickness(0,8,0,0) 
+            var addSoftwareButton = new Button
+            {
+                Content = "Add Software Folder",
+                Margin = new Thickness(0, 8, 0, 0)
             };
             addSoftwareButton.Click += async (s, e) => await AddSoftwareFolderAsync();
             var softwareContent = new StackPanel();
             softwareContent.Children.Add(_softwareFoldersPanel);
             softwareContent.Children.Add(addSoftwareButton);
             softwareTab.Content = softwareContent;
-            
+
             tabView.TabItems.Add(gamesTab);
             tabView.TabItems.Add(softwareTab);
             section.Children.Add(tabView);
@@ -112,13 +113,13 @@ namespace GameCopier
         private StackPanel CreateDriveSettingsSection()
         {
             var section = new StackPanel();
-            
-            var header = new TextBlock 
-            { 
-                Text = "Drive Display Settings:", 
+
+            var header = new TextBlock
+            {
+                Text = "Drive Display Settings:",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 FontSize = 16,
-                Margin = new Thickness(0,0,0,8) 
+                Margin = new Thickness(0, 0, 0, 8)
             };
             section.Children.Add(header);
 
@@ -126,7 +127,7 @@ namespace GameCopier
             {
                 Text = "Select which types of drives to show in the drive list:",
                 FontStyle = Windows.UI.Text.FontStyle.Italic,
-                Margin = new Thickness(0,0,0,12),
+                Margin = new Thickness(0, 0, 0, 12),
                 TextWrapping = TextWrapping.Wrap
             };
             section.Children.Add(description);
@@ -160,7 +161,7 @@ namespace GameCopier
                 {
                     Content = label,
                     IsChecked = isChecked,
-                    Margin = new Thickness(0,0,0,8)
+                    Margin = new Thickness(0, 0, 0, 8)
                 };
 
                 checkBox.Checked += (s, e) => UpdateDriveSetting(propertyName, true);
@@ -174,7 +175,7 @@ namespace GameCopier
             {
                 Content = "Hide System Drive (C:)",
                 IsChecked = settings.HideSystemDrive,
-                Margin = new Thickness(0,8,0,8)
+                Margin = new Thickness(0, 8, 0, 8)
             };
             systemDriveCheckBox.Checked += (s, e) => UpdateDriveSetting(nameof(settings.HideSystemDrive), true);
             systemDriveCheckBox.Unchecked += (s, e) => UpdateDriveSetting(nameof(settings.HideSystemDrive), false);
@@ -186,15 +187,16 @@ namespace GameCopier
             // Note about USB hard drives
             var note = new TextBlock
             {
-                Text = "?? Tip: Enable 'Show Internal/Fixed Drives' to see USB pluggable hard drives that aren't detected as removable.",
+                Text = "💡 Tip: Enable 'Show Internal/Fixed Drives' to see USB pluggable hard drives that aren't detected as removable.",
                 FontStyle = Windows.UI.Text.FontStyle.Italic,
                 Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 100, 149, 237)),
-                Margin = new Thickness(0,12,0,0),
+                Margin = new Thickness(0, 12, 0, 0),
                 TextWrapping = TextWrapping.Wrap
             };
             _driveSettingsPanel.Children.Add(note);
         }
 
+        // ...rest of the methods remain the same...
         private void CreateDriveLetterHidingSection()
         {
             var settings = _settingsService.GetSettings();
@@ -205,7 +207,7 @@ namespace GameCopier
                 Text = "Hide Specific Drive Letters:",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 FontSize = 14,
-                Margin = new Thickness(0,16,0,8)
+                Margin = new Thickness(0, 16, 0, 8)
             };
             _driveSettingsPanel.Children.Add(sectionHeader);
 
@@ -213,14 +215,14 @@ namespace GameCopier
             {
                 Text = "Select individual drive letters to hide from the main drive list:",
                 FontStyle = Windows.UI.Text.FontStyle.Italic,
-                Margin = new Thickness(0,0,0,8),
+                Margin = new Thickness(0, 0, 0, 8),
                 TextWrapping = TextWrapping.Wrap
             };
             _driveSettingsPanel.Children.Add(description);
 
             // Get all available drives on the system
             var availableDrives = GetAllSystemDrives();
-            
+
             if (availableDrives.Any())
             {
                 // Create a grid for drive checkboxes (3 columns)
@@ -236,7 +238,7 @@ namespace GameCopier
                 {
                     var driveLetter = driveInfo.Name.TrimEnd('\\');
                     var isHidden = settings.HiddenDriveLetters.Contains(driveLetter);
-                    
+
                     // Create drive display info
                     var driveLabel = driveInfo.VolumeLabel;
                     var driveSize = "";
@@ -247,15 +249,15 @@ namespace GameCopier
                     }
                     catch { }
 
-                    var displayText = string.IsNullOrEmpty(driveLabel) 
-                        ? $"{driveLetter} [{driveInfo.DriveType}]{driveSize}" 
+                    var displayText = string.IsNullOrEmpty(driveLabel)
+                        ? $"{driveLetter} [{driveInfo.DriveType}]{driveSize}"
                         : $"{driveLetter} - {driveLabel}{driveSize}";
 
                     var checkBox = new CheckBox
                     {
                         Content = displayText,
                         IsChecked = isHidden,
-                        Margin = new Thickness(0,0,8,8),
+                        Margin = new Thickness(0, 0, 8, 8),
                         FontSize = 12
                     };
 
@@ -291,7 +293,7 @@ namespace GameCopier
                 {
                     Text = "No drives detected on the system.",
                     FontStyle = Windows.UI.Text.FontStyle.Italic,
-                    Margin = new Thickness(0,0,0,8)
+                    Margin = new Thickness(0, 0, 0, 8)
                 };
                 _driveSettingsPanel.Children.Add(noDrivesText);
             }
@@ -300,7 +302,7 @@ namespace GameCopier
             var buttonPanel = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0,8,0,0),
+                Margin = new Thickness(0, 8, 0, 0),
                 Spacing = 8
             };
 
@@ -308,7 +310,7 @@ namespace GameCopier
             {
                 Content = "Show All Drives",
                 FontSize = 12,
-                Padding = new Thickness(12,6,12,6)
+                Padding = new Thickness(12, 6, 12, 6)
             };
             showAllButton.Click += (s, e) => ClearAllHiddenDrives();
 
@@ -316,7 +318,7 @@ namespace GameCopier
             {
                 Content = "Hide All Non-System",
                 FontSize = 12,
-                Padding = new Thickness(12,6,12,6)
+                Padding = new Thickness(12, 6, 12, 6)
             };
             hideAllButton.Click += (s, e) => HideAllNonSystemDrives();
 
@@ -344,18 +346,18 @@ namespace GameCopier
         private void ToggleDriveLetterVisibility(string driveLetter, bool hide)
         {
             var settings = _settingsService.GetSettings();
-            
+
             if (hide && !settings.HiddenDriveLetters.Contains(driveLetter))
             {
                 settings.HiddenDriveLetters.Add(driveLetter);
-                System.Diagnostics.Debug.WriteLine($"?? Hidden drive letter: {driveLetter}");
+                System.Diagnostics.Debug.WriteLine($"🚫 Hidden drive letter: {driveLetter}");
             }
             else if (!hide && settings.HiddenDriveLetters.Contains(driveLetter))
             {
                 settings.HiddenDriveLetters.Remove(driveLetter);
-                System.Diagnostics.Debug.WriteLine($"?? Unhidden drive letter: {driveLetter}");
+                System.Diagnostics.Debug.WriteLine($"✅ Unhidden drive letter: {driveLetter}");
             }
-            
+
             _settingsService.SaveSettings(settings);
         }
 
@@ -365,14 +367,14 @@ namespace GameCopier
             settings.HiddenDriveLetters.Clear();
             _settingsService.SaveSettings(settings);
             RefreshDriveSettingsPanel(); // Refresh to update checkboxes
-            System.Diagnostics.Debug.WriteLine("?? Cleared all hidden drive letters");
+            System.Diagnostics.Debug.WriteLine("🔄 Cleared all hidden drive letters");
         }
 
         private void HideAllNonSystemDrives()
         {
             var settings = _settingsService.GetSettings();
             var allDrives = GetAllSystemDrives();
-            
+
             settings.HiddenDriveLetters.Clear();
             foreach (var drive in allDrives)
             {
@@ -382,20 +384,20 @@ namespace GameCopier
                     settings.HiddenDriveLetters.Add(driveLetter);
                 }
             }
-            
+
             _settingsService.SaveSettings(settings);
             RefreshDriveSettingsPanel(); // Refresh to update checkboxes
-            System.Diagnostics.Debug.WriteLine($"?? Hidden all non-system drives: {string.Join(", ", settings.HiddenDriveLetters)}");
+            System.Diagnostics.Debug.WriteLine($"🔄 Hidden all non-system drives: {string.Join(", ", settings.HiddenDriveLetters)}");
         }
 
         private void UpdateDriveSetting(string propertyName, bool value)
         {
             var settings = _settingsService.GetSettings();
-            var property = typeof(DriveDisplaySettings).GetProperty(propertyName);
+            var property = typeof(Models.Configuration.DriveDisplaySettings).GetProperty(propertyName);
             property?.SetValue(settings, value);
             _settingsService.SaveSettings(settings);
-            
-            System.Diagnostics.Debug.WriteLine($"?? Updated drive setting {propertyName} = {value}");
+
+            System.Diagnostics.Debug.WriteLine($"⚙️ Updated drive setting {propertyName} = {value}");
         }
 
         private void RefreshGameFoldersPanel(StackPanel panel)
@@ -409,11 +411,11 @@ namespace GameCopier
                     Margin = new Thickness(0, 0, 0, 4)
                 };
 
-                folderPanel.Children.Add(new TextBlock 
-                { 
-                    Text = folder, 
-                    VerticalAlignment = VerticalAlignment.Center, 
-                    Margin = new Thickness(0, 0, 8, 0) 
+                folderPanel.Children.Add(new TextBlock
+                {
+                    Text = folder,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0)
                 });
 
                 var removeButton = new Button
@@ -443,11 +445,11 @@ namespace GameCopier
                     Margin = new Thickness(0, 0, 0, 4)
                 };
 
-                folderPanel.Children.Add(new TextBlock 
-                { 
-                    Text = folder, 
-                    VerticalAlignment = VerticalAlignment.Center, 
-                    Margin = new Thickness(0, 0, 8, 0) 
+                folderPanel.Children.Add(new TextBlock
+                {
+                    Text = folder,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0)
                 });
 
                 var removeButton = new Button
@@ -629,7 +631,7 @@ namespace GameCopier
             {
                 if (child is CheckBox cb && driveTypeIndex < driveTypeProperties.Length)
                 {
-                    typeof(DriveDisplaySettings).GetProperty(driveTypeProperties[driveTypeIndex])?.SetValue(settings, cb.IsChecked == true);
+                    typeof(Models.Configuration.DriveDisplaySettings).GetProperty(driveTypeProperties[driveTypeIndex])?.SetValue(settings, cb.IsChecked == true);
                     driveTypeIndex++;
                 }
             }

@@ -1,7 +1,7 @@
-using System;
+﻿using GameCopier.Models.Domain;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
-using GameCopier.Models;
+using System;
 
 namespace GameCopier.Converters
 {

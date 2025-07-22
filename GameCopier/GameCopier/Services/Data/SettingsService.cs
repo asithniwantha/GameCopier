@@ -1,3 +1,4 @@
+﻿using GameCopier.Models.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,10 +7,10 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace GameCopier.Services
+namespace GameCopier.Services.Data
 {
     [JsonSerializable(typeof(DriveDisplaySettings))]
-    [JsonSerializable(typeof(CopyMethod))]
+    [JsonSerializable(typeof(Services.CopyMethod))]
     [JsonSourceGenerationOptions(WriteIndented = true)]
     internal partial class SettingsJsonContext : JsonSerializerContext
     {
@@ -44,7 +45,7 @@ namespace GameCopier.Services
                 File.WriteAllText(_configFilePath, json);
                 LogMessage($"Drive settings saved to: {_configFilePath}");
                 LogMessage($"Drive settings saved: {json}");
-                
+
                 // Notify subscribers that settings have changed
                 SettingsChanged?.Invoke(this, _settings);
             }
@@ -97,23 +98,5 @@ namespace GameCopier.Services
             Trace.WriteLine($"[SettingsService] {message}");
 #endif
         }
-    }
-
-    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)]
-    public class DriveDisplaySettings
-    {
-        public bool ShowRemovableDrives { get; set; } = true;
-        public bool ShowFixedDrives { get; set; } = true; // Changed to true for better USB detection
-        public bool ShowNetworkDrives { get; set; } = false;
-        public bool ShowCdRomDrives { get; set; } = false;
-        public bool ShowRamDrives { get; set; } = false;
-        public bool ShowUnknownDrives { get; set; } = false;
-        public bool HideSystemDrive { get; set; } = true;
-        public List<string> HiddenDriveLetters { get; set; } = new();
-        
-        // Copy performance settings - Now defaults to Windows Explorer dialog
-        public CopyMethod PreferredCopyMethod { get; set; } = CopyMethod.ExplorerDialog;
-        public bool UseLargeDiskBuffer { get; set; } = true;
-        public int MaxConcurrentCopyJobs { get; set; } = 1; // Sequential for Explorer dialog visibility
     }
 }

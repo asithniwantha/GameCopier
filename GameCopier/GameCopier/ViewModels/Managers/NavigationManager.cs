@@ -1,8 +1,9 @@
+﻿using GameCopier.Models.Domain;
+using Microsoft.UI.Dispatching;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 
 namespace GameCopier.ViewModels.Managers
 {
@@ -26,19 +27,19 @@ namespace GameCopier.ViewModels.Managers
             {
                 if (string.IsNullOrEmpty(folderPath))
                 {
-                    System.Diagnostics.Debug.WriteLine("? NavigationManager: Folder path is null/empty");
+                    System.Diagnostics.Debug.WriteLine("❌ NavigationManager: Folder path is null/empty");
                     return;
                 }
 
                 if (!Directory.Exists(folderPath))
                 {
-                    System.Diagnostics.Debug.WriteLine($"? NavigationManager: Folder does not exist: {folderPath}");
-                    StatusChanged?.Invoke(this, $"? Folder not found: {folderPath}");
+                    System.Diagnostics.Debug.WriteLine($"❌ NavigationManager: Folder does not exist: {folderPath}");
+                    StatusChanged?.Invoke(this, $"❌ Folder not found: {folderPath}");
                     return;
                 }
 
-                System.Diagnostics.Debug.WriteLine($"?? NavigationManager: Opening folder: {folderPath}");
-                
+                System.Diagnostics.Debug.WriteLine($"📂 NavigationManager: Opening folder: {folderPath}");
+
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "explorer.exe",
@@ -47,14 +48,14 @@ namespace GameCopier.ViewModels.Managers
                 };
 
                 Process.Start(startInfo);
-                
+
                 var folderName = Path.GetFileName(folderPath);
-                StatusChanged?.Invoke(this, $"?? Opened folder: {folderName}");
-                
+                StatusChanged?.Invoke(this, $"📂 Opened folder: {folderName}");
+
                 // Reset status after a moment
                 _ = Task.Delay(2000).ContinueWith(_ =>
                 {
-                    _uiDispatcher?.TryEnqueue(() => 
+                    _uiDispatcher?.TryEnqueue(() =>
                     {
                         // Could add logic to reset status if needed
                     });
@@ -62,27 +63,27 @@ namespace GameCopier.ViewModels.Managers
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"? NavigationManager: Error opening folder - {ex.Message}");
-                StatusChanged?.Invoke(this, $"? Error opening folder: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ NavigationManager: Error opening folder - {ex.Message}");
+                StatusChanged?.Invoke(this, $"❌ Error opening folder: {ex.Message}");
             }
         }
 
-        public void OpenGameFolder(Models.Game? game)
+        public void OpenGameFolder(Game? game)
         {
             if (game == null || string.IsNullOrEmpty(game.FolderPath))
             {
-                System.Diagnostics.Debug.WriteLine("? NavigationManager: Game or FolderPath is null/empty");
+                System.Diagnostics.Debug.WriteLine("❌ NavigationManager: Game or FolderPath is null/empty");
                 return;
             }
 
             OpenFolderInExplorer(game.FolderPath);
         }
 
-        public void OpenSoftwareFolder(Models.Software? software)
+        public void OpenSoftwareFolder(Software? software)
         {
             if (software == null || string.IsNullOrEmpty(software.FolderPath))
             {
-                System.Diagnostics.Debug.WriteLine("? NavigationManager: Software or FolderPath is null/empty");
+                System.Diagnostics.Debug.WriteLine("❌ NavigationManager: Software or FolderPath is null/empty");
                 return;
             }
 

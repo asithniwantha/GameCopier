@@ -1,3 +1,4 @@
+﻿using GameCopier.Models.Domain;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -6,16 +7,15 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using GameCopier.Models;
 
-namespace GameCopier.Services
+namespace GameCopier.Services.Business
 {
     public class DeploymentService
     {
         private readonly ConcurrentQueue<DeploymentJob> _jobQueue = new();
         private readonly ConcurrentDictionary<string, DeploymentJob> _activeJobs = new();
         private readonly SemaphoreSlim _concurrencyLimit;
-        private readonly LoggingService _loggingService;
+        private readonly Logging.LoggingService _loggingService;
         private bool _isRunning = false;
         private CancellationTokenSource _cancellationTokenSource = new();
 
@@ -29,7 +29,7 @@ namespace GameCopier.Services
         public DeploymentService(int maxConcurrentJobs = 2) // Reduced for Explorer copy
         {
             _concurrencyLimit = new SemaphoreSlim(maxConcurrentJobs, maxConcurrentJobs);
-            _loggingService = new LoggingService();
+            _loggingService = new Logging.LoggingService();
         }
 
         public void QueueDeployment(Game game, Drive targetDrive)
@@ -187,20 +187,20 @@ namespace GameCopier.Services
             }
 
             Debug.WriteLine($"Using Windows Explorer copy for {sourceDir} -> {targetDir}");
-            
+
             // Use Windows Explorer copy based on preference
             bool success = false;
-            
+
             switch (PreferredCopyMethod)
             {
                 case CopyMethod.ExplorerDialog:
                     success = await FastCopyService.CopyDirectoryWithExplorerDialogAsync(sourceDir, targetDir, IntPtr.Zero, cancellationToken);
                     break;
-                    
+
                 case CopyMethod.ExplorerSilent:
                     success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
                     break;
-                    
+
                 case CopyMethod.Robocopy:
                     if (IsRobocopyAvailable())
                     {
@@ -213,7 +213,7 @@ namespace GameCopier.Services
                         success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
                     }
                     break;
-                    
+
                 case CopyMethod.Xcopy:
                     if (IsXcopyAvailable())
                     {
@@ -226,7 +226,7 @@ namespace GameCopier.Services
                         success = await FastCopyService.CopyDirectoryWithExplorerSilentAsync(sourceDir, targetDir, cancellationToken);
                     }
                     break;
-                    
+
                 default:
                     // Default to Explorer dialog
                     success = await FastCopyService.CopyDirectoryWithExplorerDialogAsync(sourceDir, targetDir, IntPtr.Zero, cancellationToken);
@@ -243,6 +243,7 @@ namespace GameCopier.Services
             JobUpdated?.Invoke(this, job);
         }
 
+        // ...existing methods remain the same...
         private static bool IsRobocopyAvailable()
         {
             try
@@ -290,7 +291,7 @@ namespace GameCopier.Services
             Directory.CreateDirectory(targetDir);
 
             var arguments = $"\"{sourceDir}\" \"{targetDir}\" /E /MT:8 /NFL /NDL /NJH /NJS /NC /NS /NP";
-            
+
             if (UseLargeDiskBuffer)
             {
                 arguments += " /J"; // Use unbuffered I/O for large files
@@ -335,7 +336,7 @@ namespace GameCopier.Services
             {
                 throw new InvalidOperationException($"Robocopy failed with exit code {process.ExitCode}");
             }
-            
+
             job.Progress = 100.0;
             JobUpdated?.Invoke(this, job);
         }
@@ -343,7 +344,7 @@ namespace GameCopier.Services
         private async Task CopyDirectoryWithXcopyAsync(string sourceDir, string targetDir, DeploymentJob job, CancellationToken cancellationToken)
         {
             Directory.CreateDirectory(targetDir);
-            
+
             var arguments = $"\"{sourceDir}\" \"{targetDir}\" /E /I /Y /H /R";
 
             var processInfo = new ProcessStartInfo
@@ -382,7 +383,7 @@ namespace GameCopier.Services
             {
                 throw new InvalidOperationException($"Xcopy failed with exit code {process.ExitCode}");
             }
-            
+
             job.Progress = 100.0;
             JobUpdated?.Invoke(this, job);
         }

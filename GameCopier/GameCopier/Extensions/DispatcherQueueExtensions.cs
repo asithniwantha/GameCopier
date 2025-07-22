@@ -1,6 +1,6 @@
+using Microsoft.UI.Dispatching;
 using System;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 
 namespace GameCopier.Extensions
 {
@@ -9,7 +9,7 @@ namespace GameCopier.Extensions
         public static async Task EnqueueAsync(this DispatcherQueue dispatcher, Action action)
         {
             var tcs = new TaskCompletionSource<bool>();
-            
+
             dispatcher.TryEnqueue(() =>
             {
                 try
@@ -22,7 +22,7 @@ namespace GameCopier.Extensions
                     tcs.SetException(ex);
                 }
             });
-            
+
             await tcs.Task;
         }
     }

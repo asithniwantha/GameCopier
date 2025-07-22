@@ -1,14 +1,13 @@
+﻿using GameCopier.Models.Domain;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using GameCopier.Models;
 
-namespace GameCopier.Services
+namespace GameCopier.Services.Data
 {
     [JsonSerializable(typeof(List<string>))]
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -38,6 +37,7 @@ namespace GameCopier.Services
             _softwareFolders = LoadSoftwareFolders();
         }
 
+        // ...existing code... (all methods remain the same)
         #region Game Management
         private List<string> LoadGameFolders()
         {

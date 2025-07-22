@@ -1,11 +1,11 @@
+﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Collections.Generic;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 
-namespace GameCopier.Models
+namespace GameCopier.Models.Domain
 {
     public class Drive : INotifyPropertyChanged
     {
@@ -177,86 +177,86 @@ namespace GameCopier.Models
             {
                 try
                 {
-                    System.Diagnostics.Debug.WriteLine($"?? EnhancedDescription for {DriveLetter} - DeviceDescription: '{DeviceDescription}', Label: '{Label}', Brand: '{BrandName}', Model: '{Model}', FileSystem: '{FileSystem}'");
-                    
+                    System.Diagnostics.Debug.WriteLine($"📋 EnhancedDescription for {DriveLetter} - DeviceDescription: '{DeviceDescription}', Label: '{Label}', Brand: '{BrandName}', Model: '{Model}', FileSystem: '{FileSystem}'");
+
                     var result = "";
-                    
+
                     // Strategy 1: If we have a meaningful, unique volume label, prefer it over device info
-                    if (!string.IsNullOrEmpty(Label) && 
-                        Label.Length > 0 && 
+                    if (!string.IsNullOrEmpty(Label) &&
+                        Label.Length > 0 &&
                         Label != "USB Drive" &&
                         !Label.ToUpper().Contains("NEW VOLUME"))
                     {
                         result = Label;
-                        System.Diagnostics.Debug.WriteLine($"?? Using meaningful volume label: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using meaningful volume label: '{result}'");
                     }
                     // Strategy 2: Handle "New Volume" case with drive letter for uniqueness
                     else if (!string.IsNullOrEmpty(Label) && Label.ToUpper().Contains("NEW VOLUME"))
                     {
                         result = $"New Volume ({DriveLetter})";
-                        System.Diagnostics.Debug.WriteLine($"?? Using generic volume label with drive letter: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using generic volume label with drive letter: '{result}'");
                     }
                     // Strategy 3: If we have brand and model information AND no meaningful volume label
                     else if (!string.IsNullOrEmpty(BrandName) && !string.IsNullOrEmpty(Model))
                     {
                         result = $"{BrandName} {Model}";
-                        System.Diagnostics.Debug.WriteLine($"?? Using brand and model: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using brand and model: '{result}'");
                     }
                     // Strategy 4: If we have just a brand name with meaningful device description
-                    else if (!string.IsNullOrEmpty(BrandName) && 
-                             !string.IsNullOrEmpty(DeviceDescription) && 
-                             DeviceDescription != "USB Storage Device" && 
-                             DeviceDescription != "USB Device" && 
+                    else if (!string.IsNullOrEmpty(BrandName) &&
+                             !string.IsNullOrEmpty(DeviceDescription) &&
+                             DeviceDescription != "USB Storage Device" &&
+                             DeviceDescription != "USB Device" &&
                              DeviceDescription != "Storage Device" &&
                              !DeviceDescription.StartsWith("USB Drive "))
                     {
                         result = DeviceDescription;
-                        System.Diagnostics.Debug.WriteLine($"?? Using device description with brand: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using device description with brand: '{result}'");
                     }
                     // Strategy 5: If we have a meaningful device description that's not just a volume label
-                    else if (!string.IsNullOrEmpty(DeviceDescription) && 
-                             DeviceDescription != "USB Storage Device" && 
-                             DeviceDescription != "USB Device" && 
+                    else if (!string.IsNullOrEmpty(DeviceDescription) &&
+                             DeviceDescription != "USB Storage Device" &&
+                             DeviceDescription != "USB Device" &&
                              DeviceDescription != "Storage Device" &&
                              !DeviceDescription.StartsWith("USB Drive ") &&
                              DeviceDescription.Length > 3)
                     {
                         result = DeviceDescription;
-                        System.Diagnostics.Debug.WriteLine($"?? Using meaningful device description: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using meaningful device description: '{result}'");
                     }
                     // Strategy 6: Use empty volume label as a last resort
                     else if (!string.IsNullOrEmpty(Label))
                     {
                         result = Label;
-                        System.Diagnostics.Debug.WriteLine($"?? Using any volume label as fallback: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using any volume label as fallback: '{result}'");
                     }
                     // Strategy 7: Final fallback with drive letter for uniqueness
                     else
                     {
                         result = $"USB Drive ({DriveLetter})";
-                        System.Diagnostics.Debug.WriteLine($"?? Using final fallback with drive letter: '{result}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Using final fallback with drive letter: '{result}'");
                     }
-                    
+
                     // Always append filesystem if available for technical information
                     if (!string.IsNullOrEmpty(FileSystem) && FileSystem != "Unknown")
                     {
                         result += $" ({FileSystem})";
-                        System.Diagnostics.Debug.WriteLine($"?? Added filesystem: '{FileSystem}'");
+                        System.Diagnostics.Debug.WriteLine($"📋 Added filesystem: '{FileSystem}'");
                     }
-                    
+
                     // Final cleanup
                     result = result.Trim();
                     while (result.Contains("  "))
                     {
                         result = result.Replace("  ", " ");
                     }
-                    
-                    System.Diagnostics.Debug.WriteLine($"?? ? Final EnhancedDescription for {DriveLetter}: '{result}'");
+
+                    System.Diagnostics.Debug.WriteLine($"📋 ✅ Final EnhancedDescription for {DriveLetter}: '{result}'");
                     return result;
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"? Error in EnhancedDescription for {DriveLetter}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"❌ Error in EnhancedDescription for {DriveLetter}: {ex.Message}");
                     return $"USB Drive ({DriveLetter}) ({FileSystem ?? "Unknown"})";
                 }
             }

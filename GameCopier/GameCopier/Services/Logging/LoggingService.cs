@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.IO;
 
-namespace GameCopier.Services
+namespace GameCopier.Services.Logging
 {
     public class LoggingService
     {
@@ -13,7 +13,7 @@ namespace GameCopier.Services
             {
                 Directory.CreateDirectory(logDirectory);
             }
-            
+
             _logFilePath = Path.Combine(logDirectory, $"GameDeploy_{DateTime.Now:yyyyMMdd}.log");
         }
 
@@ -26,12 +26,12 @@ namespace GameCopier.Services
         {
             var status = success ? "SUCCESS" : "FAILED";
             var message = $"DEPLOYMENT {status} - Job: {jobId} | Game: {game} | Drive: {drive}";
-            
+
             if (!success && !string.IsNullOrEmpty(error))
             {
                 message += $" | Error: {error}";
             }
-            
+
             LogMessage(message);
         }
 
@@ -42,7 +42,7 @@ namespace GameCopier.Services
             {
                 logEntry += $" | Exception: {exception.Message}";
             }
-            
+
             LogMessage(logEntry);
         }
 
@@ -52,7 +52,7 @@ namespace GameCopier.Services
             {
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 var logEntry = $"[{timestamp}] {message}";
-                
+
                 File.AppendAllText(_logFilePath, logEntry + Environment.NewLine);
             }
             catch

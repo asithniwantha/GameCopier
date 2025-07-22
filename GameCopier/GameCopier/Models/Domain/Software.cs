@@ -1,8 +1,7 @@
-using System;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace GameCopier.Models
+namespace GameCopier.Models.Domain
 {
     public class Software : INotifyPropertyChanged
     {

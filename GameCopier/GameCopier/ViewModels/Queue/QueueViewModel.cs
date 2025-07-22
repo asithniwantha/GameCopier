@@ -1,13 +1,13 @@
+﻿using GameCopier.Models.Domain;
+using GameCopier.ViewModels.Managers;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using GameCopier.Models;
-using GameCopier.ViewModels.Managers;
 
-namespace GameCopier.ViewModels
+namespace GameCopier.ViewModels.Queue
 {
     /// <summary>
     /// Manages the copy queue and job operations
@@ -39,7 +39,7 @@ namespace GameCopier.ViewModels
             _deploymentManager = deploymentManager;
             _deploymentManager.JobUpdated += OnJobUpdated;
             _deploymentManager.StatusChanged += (s, status) => StatusChanged?.Invoke(this, status);
-            _deploymentManager.PropertyChanged += (s, e) => 
+            _deploymentManager.PropertyChanged += (s, e) =>
             {
                 if (e.PropertyName == nameof(DeploymentManager.IsRunning))
                     OnPropertyChanged(nameof(IsDeploymentRunning));
@@ -49,10 +49,10 @@ namespace GameCopier.ViewModels
         public bool CanAddToQueue(Game? selectedGame, Software? selectedSoftware, Drive? selectedDrive)
         {
             if (IsDeploymentRunning) return false;
-            
+
             var hasSelectedItem = selectedGame != null || selectedSoftware != null;
             var hasSelectedDrive = selectedDrive != null;
-            
+
             return hasSelectedItem && hasSelectedDrive;
         }
 
@@ -60,15 +60,22 @@ namespace GameCopier.ViewModels
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine("🚀 QueueViewModel: AddToQueue called");
+                System.Diagnostics.Debug.WriteLine($"   📊 Selected Game: {selectedGame?.Name ?? "None"}");
+                System.Diagnostics.Debug.WriteLine($"   📊 Selected Software: {selectedSoftware?.Name ?? "None"}");
+                System.Diagnostics.Debug.WriteLine($"   📊 Selected Drive: {selectedDrive?.Name ?? "None"}");
+                
                 if (selectedGame == null && selectedSoftware == null)
                 {
-                    StatusChanged?.Invoke(this, "?? Please select a game or software to add to queue.");
+                    System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: No game or software selected");
+                    StatusChanged?.Invoke(this, "⚠️ Please select a game or software to add to queue.");
                     return false;
                 }
 
                 if (selectedDrive == null)
                 {
-                    StatusChanged?.Invoke(this, "?? Please select a USB drive.");
+                    System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: No drive selected");
+                    StatusChanged?.Invoke(this, "⚠️ Please select a USB drive.");
                     return false;
                 }
 
@@ -77,9 +84,15 @@ namespace GameCopier.ViewModels
                 // Add game job
                 if (selectedGame != null)
                 {
-                    if (!_deploymentManager.ValidateSpaceRequirement(new DeploymentJob { Game = selectedGame, TargetDrive = selectedDrive }))
+                    System.Diagnostics.Debug.WriteLine($"🎮 QueueViewModel: Processing game job for {selectedGame.Name}");
+                    
+                    var gameJob = new DeploymentJob { Game = selectedGame, TargetDrive = selectedDrive };
+                    bool hasSpace = _deploymentManager.ValidateSpaceRequirement(gameJob);
+                    
+                    if (!hasSpace)
                     {
-                        StatusChanged?.Invoke(this, $"?? Not enough space on {selectedDrive.Name} for {selectedGame.Name}");
+                        System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Insufficient space for {selectedGame.Name}");
+                        StatusChanged?.Invoke(this, $"⚠️ Not enough space on {selectedDrive.Name} for {selectedGame.Name}");
                         return false;
                     }
 
@@ -92,12 +105,14 @@ namespace GameCopier.ViewModels
 
                     DeploymentJobs.Add(job);
                     jobsAdded++;
-                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Added game job - {selectedGame.Name} ? {selectedDrive.Name}");
+                    System.Diagnostics.Debug.WriteLine($"✅ QueueViewModel: Added game job - {selectedGame.Name} → {selectedDrive.Name}");
                 }
 
                 // Add software job (convert to game format for compatibility)
                 if (selectedSoftware != null)
                 {
+                    System.Diagnostics.Debug.WriteLine($"💾 QueueViewModel: Processing software job for {selectedSoftware.Name}");
+                    
                     var softwareAsGame = new Game
                     {
                         Name = selectedSoftware.Name,
@@ -105,9 +120,13 @@ namespace GameCopier.ViewModels
                         FolderPath = selectedSoftware.FolderPath
                     };
 
-                    if (!_deploymentManager.ValidateSpaceRequirement(new DeploymentJob { Game = softwareAsGame, TargetDrive = selectedDrive }))
+                    var softwareJob = new DeploymentJob { Game = softwareAsGame, TargetDrive = selectedDrive };
+                    bool hasSpace = _deploymentManager.ValidateSpaceRequirement(softwareJob);
+                    
+                    if (!hasSpace)
                     {
-                        StatusChanged?.Invoke(this, $"?? Not enough space on {selectedDrive.Name} for {selectedSoftware.Name}");
+                        System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Insufficient space for {selectedSoftware.Name}");
+                        StatusChanged?.Invoke(this, $"⚠️ Not enough space on {selectedDrive.Name} for {selectedSoftware.Name}");
                         return false;
                     }
 
@@ -120,70 +139,95 @@ namespace GameCopier.ViewModels
 
                     DeploymentJobs.Add(job);
                     jobsAdded++;
-                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Added software job - {selectedSoftware.Name} ? {selectedDrive.Name}");
+                    System.Diagnostics.Debug.WriteLine($"✅ QueueViewModel: Added software job - {selectedSoftware.Name} → {selectedDrive.Name}");
                 }
 
                 if (jobsAdded > 0)
                 {
                     var itemName = selectedGame?.Name ?? selectedSoftware!.Name;
-                    StatusChanged?.Invoke(this, $"? Added {itemName} to copy queue! Windows Explorer dialog will appear during copy.");
-                    
+                    System.Diagnostics.Debug.WriteLine($"✅ QueueViewModel: Successfully added {jobsAdded} job(s) for {itemName}");
+                    StatusChanged?.Invoke(this, $"✅ Added {itemName} to copy queue! Windows Explorer dialog will appear during copy.");
+
                     // Trigger queue analysis update
                     OnPropertyChanged("QueueAnalysis");
                     return true;
                 }
 
+                System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: No jobs were added");
                 return false;
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"? Error adding to queue: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? QueueViewModel: Error in AddToQueue - {ex.Message}");
+                StatusChanged?.Invoke(this, $"❌ Error adding to queue: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Error in AddToQueue - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Stack trace - {ex.StackTrace}");
                 return false;
             }
         }
 
         public async System.Threading.Tasks.Task<bool> StartQueueAsync()
         {
-            if (IsDeploymentRunning || !DeploymentJobs.Any()) return false;
-
             try
             {
+                System.Diagnostics.Debug.WriteLine("🚀 QueueViewModel: StartQueueAsync called");
+
+                if (IsDeploymentRunning)
+                {
+                    System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: Deployment already running");
+                    return false;
+                }
+
+                if (!DeploymentJobs.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: No jobs in queue");
+                    return false;
+                }
+
                 var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
-                if (!pendingJobs.Any()) return false;
+                if (!pendingJobs.Any())
+                {
+                    System.Diagnostics.Debug.WriteLine("❌ QueueViewModel: No pending jobs in queue");
+                    return false;
+                }
+
+                System.Diagnostics.Debug.WriteLine($"✅ QueueViewModel: Found {pendingJobs.Count} pending jobs, starting execution...");
 
                 // Analyze the queue for parallel processing potential
                 var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
                 var driveCount = jobsByDrive.Count;
-                
+
                 if (driveCount > 1)
                 {
-                    StatusChanged?.Invoke(this, $"?? Starting {pendingJobs.Count} jobs across {driveCount} drives - parallel processing enabled!");
-                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Parallel processing - {driveCount} drives will run simultaneously");
-                    
+                    StatusChanged?.Invoke(this, $"🚀 Starting {pendingJobs.Count} jobs across {driveCount} drives - parallel processing enabled!");
+                    System.Diagnostics.Debug.WriteLine($"🚀 QueueViewModel: Parallel processing - {driveCount} drives will run simultaneously");
+
                     foreach (var driveGroup in jobsByDrive)
                     {
                         var jobCount = driveGroup.Count();
-                        System.Diagnostics.Debug.WriteLine($"   ?? Drive {driveGroup.Key}: {jobCount} jobs");
+                        System.Diagnostics.Debug.WriteLine($"   📊 Drive {driveGroup.Key}: {jobCount} jobs");
                     }
                 }
                 else
                 {
-                    StatusChanged?.Invoke(this, $"?? Starting {pendingJobs.Count} jobs to single drive - sequential processing");
-                    System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Single drive processing - jobs will run sequentially");
+                    StatusChanged?.Invoke(this, $"🚀 Starting {pendingJobs.Count} jobs to single drive - sequential processing");
+                    System.Diagnostics.Debug.WriteLine($"🚀 QueueViewModel: Single drive processing - jobs will run sequentially");
                 }
 
-                System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Starting queue with {pendingJobs.Count} jobs");
-                
+                System.Diagnostics.Debug.WriteLine($"🚀 QueueViewModel: Calling DeploymentManager.ProcessQueueAsync with {pendingJobs.Count} jobs");
+
                 bool success = await _deploymentManager.ProcessQueueAsync(pendingJobs);
+
+                System.Diagnostics.Debug.WriteLine($"🚀 QueueViewModel: ProcessQueueAsync completed with result: {success}");
+
                 UpdateOverallProgress();
-                
+
                 return success;
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"? Error starting queue: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? QueueViewModel: Error in StartQueueAsync - {ex.Message}");
+                StatusChanged?.Invoke(this, $"❌ Error starting queue: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Error in StartQueueAsync - {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Stack trace - {ex.StackTrace}");
                 return false;
             }
         }
@@ -197,19 +241,19 @@ namespace GameCopier.ViewModels
         {
             var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
             if (!pendingJobs.Any()) return "No pending jobs in queue";
-            
+
             var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
             var driveCount = jobsByDrive.Count;
-            
+
             if (driveCount == 1)
             {
                 var drive = jobsByDrive.First().Key;
-                return $"{pendingJobs.Count} jobs ? {drive} (sequential)";
+                return $"{pendingJobs.Count} jobs → {drive} (sequential)";
             }
             else
             {
                 var driveDetails = jobsByDrive.Select(g => $"{g.Key} ({g.Count()})").ToList();
-                return $"{pendingJobs.Count} jobs ? {string.Join(", ", driveDetails)} (parallel by drive)";
+                return $"{pendingJobs.Count} jobs → {string.Join(", ", driveDetails)} (parallel by drive)";
             }
         }
 
@@ -220,10 +264,10 @@ namespace GameCopier.ViewModels
         {
             var pendingJobs = DeploymentJobs.Where(j => j.Status == DeploymentJobStatus.Pending).ToList();
             if (!pendingJobs.Any()) return "No jobs to process";
-            
+
             var jobsByDrive = pendingJobs.GroupBy(j => j.TargetDrive.DriveLetter).ToList();
             var driveCount = jobsByDrive.Count;
-            
+
             if (driveCount == 1)
             {
                 return $"Single drive mode: All {pendingJobs.Count} jobs will copy to {jobsByDrive.First().Key} sequentially for optimal performance.";
@@ -232,19 +276,19 @@ namespace GameCopier.ViewModels
             {
                 var details = new List<string>();
                 details.Add($"Smart parallel mode: {driveCount} drives will be processed simultaneously:");
-                
+
                 foreach (var driveGroup in jobsByDrive.OrderBy(g => g.Key))
                 {
                     var jobNames = driveGroup.Select(j => j.Game.Name).Take(3).ToList();
                     var remaining = driveGroup.Count() - jobNames.Count;
                     var jobList = string.Join(", ", jobNames);
                     if (remaining > 0) jobList += $" (+{remaining} more)";
-                    
-                    details.Add($"  ?? {driveGroup.Key}: {driveGroup.Count()} jobs ({jobList})");
+
+                    details.Add($"  📊 {driveGroup.Key}: {driveGroup.Count()} jobs ({jobList})");
                 }
-                
+
                 details.Add($"Total time savings: ~{Math.Round((driveCount - 1) * 100.0 / driveCount, 0)}% faster than sequential processing");
-                
+
                 return string.Join("\n", details);
             }
         }
@@ -257,21 +301,21 @@ namespace GameCopier.ViewModels
             {
                 if (job.Status == DeploymentJobStatus.InProgress)
                 {
-                    StatusChanged?.Invoke(this, "?? Cannot remove job that is currently in progress.");
+                    StatusChanged?.Invoke(this, "⚠️ Cannot remove job that is currently in progress.");
                     return;
                 }
 
                 DeploymentJobs.Remove(job);
-                StatusChanged?.Invoke(this, $"??? Removed {job.DisplayName} from queue");
-                System.Diagnostics.Debug.WriteLine($"??? QueueViewModel: Removed job - {job.DisplayName}");
-                
+                StatusChanged?.Invoke(this, $"🗑️ Removed {job.DisplayName} from queue");
+                System.Diagnostics.Debug.WriteLine($"🗑️ QueueViewModel: Removed job - {job.DisplayName}");
+
                 // Trigger queue analysis update
                 OnPropertyChanged("QueueAnalysis");
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"? Error removing from queue: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? QueueViewModel: Error in RemoveFromQueue - {ex.Message}");
+                StatusChanged?.Invoke(this, $"❌ Error removing from queue: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Error in RemoveFromQueue - {ex.Message}");
             }
         }
 
@@ -281,22 +325,22 @@ namespace GameCopier.ViewModels
             {
                 if (IsDeploymentRunning)
                 {
-                    StatusChanged?.Invoke(this, "?? Cannot clear queue while deployment is running.");
+                    StatusChanged?.Invoke(this, "⚠️ Cannot clear queue while deployment is running.");
                     return;
                 }
 
                 var jobCount = DeploymentJobs.Count;
                 DeploymentJobs.Clear();
-                StatusChanged?.Invoke(this, $"?? Cleared {jobCount} jobs from queue");
-                System.Diagnostics.Debug.WriteLine($"?? QueueViewModel: Cleared {jobCount} jobs");
-                
+                StatusChanged?.Invoke(this, $"🗑️ Cleared {jobCount} jobs from queue");
+                System.Diagnostics.Debug.WriteLine($"🗑️ QueueViewModel: Cleared {jobCount} jobs");
+
                 // Trigger queue analysis update
                 OnPropertyChanged("QueueAnalysis");
             }
             catch (Exception ex)
             {
-                StatusChanged?.Invoke(this, $"? Error clearing queue: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"? QueueViewModel: Error in ClearQueue - {ex.Message}");
+                StatusChanged?.Invoke(this, $"❌ Error clearing queue: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"❌ QueueViewModel: Error in ClearQueue - {ex.Message}");
             }
         }
 
@@ -315,7 +359,7 @@ namespace GameCopier.ViewModels
             }
 
             UpdateOverallProgress();
-            
+
             // Trigger queue analysis update by notifying property changed
             OnPropertyChanged("QueueAnalysis");
         }
@@ -333,10 +377,10 @@ namespace GameCopier.ViewModels
 
             var completedJobs = DeploymentJobs.Count(j => j.Status == DeploymentJobStatus.Completed);
             var totalJobs = DeploymentJobs.Count;
-            
+
             if (completedJobs == totalJobs && totalJobs > 0)
             {
-                StatusChanged?.Invoke(this, $"? All copy operations completed! ({completedJobs}/{totalJobs})");
+                StatusChanged?.Invoke(this, $"✅ All copy operations completed! ({completedJobs}/{totalJobs})");
             }
         }
 

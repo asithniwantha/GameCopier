@@ -1,9 +1,10 @@
+﻿using GameCopier.Models.Domain;
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace GameCopier.Models
+namespace GameCopier.Models.Domain
 {
     public enum DeploymentJobStatus
     {
@@ -155,16 +156,16 @@ namespace GameCopier.Models
         /// </summary>
         public CancellationToken CancellationToken => _cancellationTokenSource?.Token ?? CancellationToken.None;
 
-        public string DisplayName => $"{Game.Name} ? {TargetDrive.Name}";
-        
+        public string DisplayName => $"{Game.Name} → {TargetDrive.Name}";
+
         public string StatusDisplay => Status switch
         {
             DeploymentJobStatus.Pending => "Pending",
             DeploymentJobStatus.InProgress => $"Copying... {Progress:F0}%",
-            DeploymentJobStatus.Paused => $"?? Paused at {Progress:F0}%",
-            DeploymentJobStatus.Completed => "? Completed",
-            DeploymentJobStatus.Failed => $"? Failed: {ErrorMessage}",
-            DeploymentJobStatus.Cancelled => "?? Cancelled",
+            DeploymentJobStatus.Paused => $"⏸️ Paused at {Progress:F0}%",
+            DeploymentJobStatus.Completed => "✅ Completed",
+            DeploymentJobStatus.Failed => $"❌ Failed: {ErrorMessage}",
+            DeploymentJobStatus.Cancelled => "🚫 Cancelled",
             _ => "Unknown"
         };
 
@@ -182,7 +183,7 @@ namespace GameCopier.Models
             {
                 Status = DeploymentJobStatus.Paused;
                 PausedAt = DateTime.Now;
-                System.Diagnostics.Debug.WriteLine($"?? Job paused: {DisplayName}");
+                System.Diagnostics.Debug.WriteLine($"⏸️ Job paused: {DisplayName}");
             }
         }
 
@@ -195,7 +196,7 @@ namespace GameCopier.Models
             {
                 Status = DeploymentJobStatus.InProgress;
                 PausedAt = null;
-                System.Diagnostics.Debug.WriteLine($"?? Job resumed: {DisplayName}");
+                System.Diagnostics.Debug.WriteLine($"▶️ Job resumed: {DisplayName}");
             }
         }
 
@@ -208,7 +209,7 @@ namespace GameCopier.Models
             {
                 _cancellationTokenSource?.Cancel();
                 Status = DeploymentJobStatus.Cancelled;
-                System.Diagnostics.Debug.WriteLine($"?? Job cancelled: {DisplayName}");
+                System.Diagnostics.Debug.WriteLine($"🚫 Job cancelled: {DisplayName}");
             }
         }
 

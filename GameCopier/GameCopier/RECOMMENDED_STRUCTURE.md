@@ -1,0 +1,93 @@
+﻿# Recommended Project Structure
+
+## Current Issues:
+- All files are mixed together in the root namespace
+- Large files with multiple responsibilities
+- No clear separation between UI, Business Logic, and Data layers
+
+## Recommended Structure:
+GameCopier/
+├── Core/
+│   ├── Interfaces/
+│   │   ├── ILibraryService.cs
+│   │   ├── IDriveService.cs
+│   │   ├── IDeploymentService.cs
+│   │   └── ISettingsService.cs
+│   ├── Constants/
+│   │   ├── AppConstants.cs
+│   │   └── FileConstants.cs
+│   └── Exceptions/
+│       ├── DriveNotFoundException.cs
+│       └── DeploymentException.cs
+├── Models/
+│   ├── Domain/
+│   │   ├── Game.cs
+│   │   ├── Software.cs
+│   │   ├── Drive.cs
+│   │   └── DeploymentJob.cs
+│   ├── Configuration/
+│   │   ├── DriveDisplaySettings.cs
+│   │   └── AppSettings.cs
+│   └── Events/
+│       ├── UsbDriveChangedEventArgs.cs
+│       └── DeploymentEventArgs.cs
+├── Services/
+│   ├── Data/
+│   │   ├── LibraryService.cs
+│   │   ├── SettingsService.cs
+│   │   └── ConfigurationService.cs
+│   ├── Infrastructure/
+│   │   ├── DriveService.cs
+│   │   ├── FileSystemService.cs
+│   │   └── UsbDetectionService.cs
+│   ├── Business/
+│   │   ├── DeploymentService.cs
+│   │   ├── FastCopyService.cs
+│   │   └── ValidationService.cs
+│   └── Logging/
+│       └── LoggingService.cs
+├── ViewModels/
+│   ├── Main/
+│   │   └── MainViewModel.cs
+│   ├── Queue/
+│   │   └── QueueViewModel.cs
+│   ├── Managers/
+│   │   ├── LibraryManager.cs
+│   │   ├── UsbDriveManager.cs
+│   │   ├── DeploymentManager.cs
+│   │   └── NavigationManager.cs
+│   └── Base/
+│       ├── BaseViewModel.cs
+│       └── RelayCommand.cs
+├── Views/
+│   ├── Main/
+│   │   ├── MainWindow.xaml
+│   │   └── MainWindow.xaml.cs
+│   ├── Dialogs/
+│   │   ├── SettingsDialog.xaml
+│   │   └── SettingsDialog.xaml.cs
+│   └── UserControls/
+│       ├── GameListControl.xaml
+│       ├── DriveListControl.xaml
+│       └── QueueControl.xaml
+├── Converters/
+│   ├── BoolToVisibilityConverter.cs
+│   ├── ProgressConverter.cs
+│   └── DeploymentConverters.cs
+├── Extensions/
+│   ├── DispatcherQueueExtensions.cs
+│   ├── CollectionExtensions.cs
+│   └── StringExtensions.cs
+├── Resources/
+│   ├── Styles/
+│   ├── Images/
+│   └── Localization/
+└── Configuration/
+    ├── app.manifest
+    └── ILLink.Descriptors.xml
+## Benefits of This Structure:
+1. **Clear separation of concerns** - Each folder has a specific responsibility
+2. **Easy to find files** - Logical grouping reduces search time
+3. **Scalable** - Easy to add new features without cluttering
+4. **Testable** - Services can be easily mocked with interfaces
+5. **Maintainable** - Related code is grouped together
