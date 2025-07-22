@@ -1,106 +1,208 @@
-name: Release
+﻿name: Release
 
 on:
   push:
     tags:
       - 'v*.*.*'
 
-permissions:
-  contents: write
+env:
+  DOTNET_VERSION: '9.0.x'
+  PROJECT_PATH: 'GameCopier/GameCopier/GameCopier.csproj'
 
 jobs:
   create-release:
     runs-on: windows-latest
     
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-        
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-      
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Get version from tag
       id: get_version
       run: |
-        $version = "${{ github.ref }}" -replace "refs/tags/v", ""
-        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "TAG_NAME=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-      shell: pwsh
-      
-    - name: Update version in project file
+        $version = "${{ github.ref }}".Replace("refs/tags/v", "")
+        echo "version=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+
+    - name: Generate release notes
+      id: release_notes
       run: |
-        $projectFile = "GameCopier/GameCopier/GameCopier.csproj"
-        $content = Get-Content $projectFile
-        $content = $content -replace "<Version>.*</Version>", "<Version>${{ steps.get_version.outputs.VERSION }}</Version>"
-        $content = $content -replace "<AssemblyVersion>.*</AssemblyVersion>", "<AssemblyVersion>${{ steps.get_version.outputs.VERSION }}</AssemblyVersion>"
-        $content = $content -replace "<FileVersion>.*</FileVersion>", "<FileVersion>${{ steps.get_version.outputs.VERSION }}</FileVersion>"
-        Set-Content $projectFile $content
-      shell: pwsh
-      
-    - name: Restore dependencies
-      run: dotnet restore GameCopier/GameCopier/GameCopier.csproj
-      
-    - name: Build Release x64
-      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x64 --no-restore
-      
-    - name: Build Release x86
-      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x86 --no-restore
-      
-    - name: Build Release ARM64
-      run: dotnet build GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch arm64 --no-restore
-      
-    - name: Publish x64
-      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x64 --self-contained true --output ./publish/x64
-      
-    - name: Publish x86
-      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch x86 --self-contained true --output ./publish/x86
-      
-    - name: Publish ARM64
-      run: dotnet publish GameCopier/GameCopier/GameCopier.csproj --configuration Release --arch arm64 --self-contained true --output ./publish/arm64
-      
-    - name: Create release archives
-      run: |
-        Compress-Archive -Path "./publish/x64/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-x64.zip"
-        Compress-Archive -Path "./publish/x86/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-x86.zip"
-        Compress-Archive -Path "./publish/arm64/*" -DestinationPath "GameCopier-${{ steps.get_version.outputs.VERSION }}-arm64.zip"
-      shell: pwsh
-      
-    - name: Generate changelog
-      id: changelog
-      run: |
-        # Extract changelog for this version
-        $changelogContent = Get-Content "CHANGELOG.md" -Raw
-        $pattern = "## \[${{ steps.get_version.outputs.VERSION }}\].*?(?=## \[|\z)"
-        $versionChangelog = [regex]::Match($changelogContent, $pattern, [Text.RegularExpressions.RegexOptions]::Singleline).Value
+        $version = "${{ steps.get_version.outputs.version }}"
+        $notes = @"
+        # GameCopier v$version
         
-        if ([string]::IsNullOrEmpty($versionChangelog)) {
-          $versionChangelog = "### Changes`n- See full changelog in CHANGELOG.md"
-        }
+        ## What's New
         
-        # Save to file for the release
-        $versionChangelog | Out-File -FilePath "release-notes.md" -Encoding UTF8
+        This release includes the following improvements and features:
         
-        # Set output for GitHub (escape newlines)
-        $escapedChangelog = $versionChangelog -replace "`r`n", "%0A" -replace "`n", "%0A"
-        echo "CHANGELOG=$escapedChangelog" >> $env:GITHUB_OUTPUT
-      shell: pwsh
-      
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        name: GameCopier ${{ steps.get_version.outputs.VERSION }}
-        body_path: release-notes.md
-        files: |
-          GameCopier-${{ steps.get_version.outputs.VERSION }}-x64.zip
-          GameCopier-${{ steps.get_version.outputs.VERSION }}-x86.zip
-          GameCopier-${{ steps.get_version.outputs.VERSION }}-arm64.zip
-        draft: false
-        prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
+        ### Features
+        - Enhanced copy operations with dual progress tracking
+        - Improved USB drive detection and management
+        - Modern Windows 11 UI with Fluent Design
+        - Comprehensive game and software library management
+        
+        ### Improvements
+        - Better error handling and user feedback
+        - Optimized performance for large file operations
+        - Enhanced robocopy integration
+        - Improved settings management
+        
+        ### Bug Fixes
+        - Fixed various UI threading issues
+        - Resolved memory leaks in drive monitoring
+        - Improved file path handling
+        
+        ## Download
+        
+        Choose the appropriate version for your system:
+        - **x64**: For 64-bit Windows systems (recommended)
+        - **x86**: For 32-bit Windows systems
+        - **ARM64**: For ARM-based Windows devices
+        
+        ## System Requirements
+        
+        - Windows 10 version 1903 (19H1) or later
+        - .NET 9.0 Runtime (included in self-contained builds)
+        - At least 100MB free disk space
+        
+        ## Installation
+        
+        1. Download the appropriate ZIP file for your system
+        2. Extract to your desired location
+        3. Run GameCopier.exe
+        
+        For detailed documentation, see the [README](https://github.com/${{ github.repository }}/blob/main/README.md).
+        "@
+        
+        # Save to file for upload
+        $notes | Out-File -FilePath release_notes.txt -Encoding UTF8
+        
+        # Output for GitHub (escape newlines)
+        $notesEscaped = $notes -replace "`r`n", "%0A" -replace "`n", "%0A"
+        echo "notes=$notesEscaped" >> $env:GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: GameCopier v${{ steps.get_version.outputs.version }}
+        body: ${{ steps.release_notes.outputs.notes }}
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.version, '-') }}
+
+  build-and-upload:
+    runs-on: windows-latest
+    needs: create-release
+    
+    strategy:
+      matrix:
+        platform: [x64, x86, ARM64]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Publish application
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --runtime win-${{ matrix.platform }} \
+          --self-contained true \
+          --output ./publish/win-${{ matrix.platform }} \
+          -p:PublishSingleFile=true \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          -p:DebugType=None \
+          -p:DebugSymbols=false
+
+    - name: Create release package
+      run: |
+        $version = "${{ needs.create-release.outputs.version }}"
+        $platform = "${{ matrix.platform }}"
+        $packageName = "GameCopier-v$version-win-$platform"
+        
+        # Create package directory
+        New-Item -ItemType Directory -Path "packages" -Force
+        
+        # Copy files and create ZIP
+        $sourceDir = "./publish/win-$platform"
+        $zipPath = "packages/$packageName.zip"
+        
+        Compress-Archive -Path "$sourceDir/*" -DestinationPath $zipPath -CompressionLevel Optimal
+        
+        # Create checksums
+        $hash = Get-FileHash -Path $zipPath -Algorithm SHA256
+        "$($hash.Hash.ToLower())  $packageName.zip" | Out-File -FilePath "packages/$packageName.sha256" -Encoding ASCII
+        
+        echo "PACKAGE_NAME=$packageName" >> $env:GITHUB_ENV
+        echo "ZIP_PATH=$zipPath" >> $env:GITHUB_ENV
+        echo "SHA256_PATH=packages/$packageName.sha256" >> $env:GITHUB_ENV
+
+    - name: Upload Release Asset (ZIP)
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.ZIP_PATH }}
+        asset_name: ${{ env.PACKAGE_NAME }}.zip
+        asset_content_type: application/zip
+
+    - name: Upload Release Asset (SHA256)
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ${{ env.SHA256_PATH }}
+        asset_name: ${{ env.PACKAGE_NAME }}.sha256
+        asset_content_type: text/plain
+
+  update-documentation:
+    runs-on: ubuntu-latest
+    needs: [create-release, build-and-upload]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update version badge in README
+      run: |
+        version="${{ needs.create-release.outputs.version }}"
+        sed -i "s/version-.*-blue/version-$version-blue/" README.md
+
+    - name: Commit version update
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add README.md
+        git commit -m "Update version badge to v${{ needs.create-release.outputs.version }}" || exit 0
+        git push
+
+  notify-release:
+    runs-on: ubuntu-latest
+    needs: [create-release, build-and-upload, update-documentation]
+
+    steps:
+    - name: Notify release completion
+      run: |
+        echo "🎉 GameCopier v${{ needs.create-release.outputs.version }} has been released!"
+        echo "📦 Release URL: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.create-release.outputs.version }}"
+        echo "✅ All platform builds completed successfully"

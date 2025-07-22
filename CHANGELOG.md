@@ -1,116 +1,132 @@
-# Changelog
+﻿# Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to GameCopier will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
-- Initial project setup with WinUI 3 framework
-- Comprehensive drive detection and filtering system
-- Individual drive letter hiding functionality
-- Enhanced settings dialog with scrollable interface
-- Real-time USB drive monitoring with visual highlighting
-- Multi-threaded game deployment with progress tracking
-- Game library management with multiple folder support
-- Advanced drive information display (brand, model, filesystem)
+### Planned for v2.0.0
+- Parallel multi-drive copy operations
+- Real-time queue additions during active operations
+- Advanced progress tracking with ETA calculations
+- Smart copy optimization with deduplication
+- Resource management and bandwidth control
+- Cloud integration capabilities
 
-### Features
-- **Game Library Management**
-  - Multiple game directory support
-  - Automatic game scanning and size calculation
-  - Real-time search functionality across game collections
-  - Add/remove game folders through settings interface
-
-- **Drive Management**
-  - Smart USB and external drive detection
-  - Support for all Windows drive types (Fixed, Removable, Network, CD/DVD, RAM)
-  - Real-time drive insertion/removal monitoring
-  - Enhanced drive information with WMI integration
-  - Customizable drive type filtering
-  - Individual drive letter hiding/showing
-  - Quick actions for bulk drive visibility management
-
-- **Deployment System**
-  - Multi-threaded parallel file copying
-  - Real-time progress tracking for each deployment job
-  - Automatic space validation before deployment
-  - Support for deploying multiple games to multiple drives
-  - Cancellation support for ongoing deployments
-
-- **Settings & Configuration**
-  - Persistent settings storage using JSON configuration
-  - Comprehensive drive display customization
-  - Game library folder management
-  - System drive hiding option
-  - Import/export configuration capabilities
-
-- **User Interface**
-  - Modern WinUI 3 design with native Windows 11 styling
-  - Responsive layout adapting to different window sizes
-  - Real-time status updates and progress indicators
-  - Accessible design with keyboard navigation support
-  - Dark/light theme support following system preferences
-
-### Technical Highlights
-- **Architecture**: Clean MVVM pattern implementation
-- **Performance**: Optimized file operations with parallel processing
-- **Reliability**: Comprehensive error handling and logging
-- **Compatibility**: Support for Windows 10 1809+ and Windows 11
-- **Scalability**: Efficient handling of large game libraries and multiple drives
-
-### Dependencies
-- .NET 9.0 Runtime
-- Microsoft Windows App SDK 1.7+
-- CommunityToolkit.Mvvm 8.4.0
-- System.Management 9.0.6
-
-## [0.1.0] - 2024-12-XX
+## [1.0.0-preview] - 2024-12-19
 
 ### Added
 - Initial release of GameCopier
-- Core functionality for game library management
-- Basic drive detection and deployment features
-- Settings dialog with drive filtering options
-- Real-time USB drive monitoring
-- Multi-threaded deployment system
+- Game and software library management
+- USB drive detection and management
+- Copy queue system with job tracking
+- Multiple copy methods (Robocopy, Windows Explorer, Custom)
+- Dual progress tracking (visible robocopy window + UI progress bars)
+- Modern WinUI 3 interface with Fluent Design
+- Settings dialog for library folder management
+- Search functionality for games and software
+- Real-time status updates and notifications
+- Comprehensive error handling and logging
+- Version information service
+- Detailed documentation and roadmap
+
+### Features
+- **Library Management**: Add and manage game/software folders
+- **Drive Detection**: Automatic USB drive discovery and monitoring
+- **Copy Operations**: Queue-based copying with multiple method support
+- **Progress Tracking**: Real-time progress bars and robocopy window display
+- **Search & Filter**: Quick search across game and software libraries
+- **Settings**: Configurable library paths and display options
+- **Testing**: Built-in test functions for copy operation verification
+
+### Technical Details
+- Built with .NET 9.0 and WinUI 3
+- MVVM architecture using CommunityToolkit.Mvvm
+- JSON-based configuration storage
+- Windows Shell API integration
+- Robocopy integration for reliable file operations
+- Thread-safe UI updates with proper async patterns
+
+### Limitations (Addressed in v2.0.0)
+- Sequential copy operations only
+- Cannot add items to queue during active operations
+- Basic progress tracking (enhanced tracking planned)
+- Single-drive copy operations (parallel operations planned)
+
+## [0.9.0-beta] - Development Phase
+
+### Added
+- Core application framework
+- Basic UI layout and navigation
+- Game/software detection algorithms
+- USB drive monitoring service
+- Initial copy operation implementation
+
+### Fixed
+- Memory leaks in drive monitoring
+- UI threading issues
+- File path handling edge cases
+
+## [0.5.0-alpha] - Prototype Phase
+
+### Added
+- Proof of concept implementation
+- Basic file copying functionality
+- Simple UI mockups
+- Core data models
 
 ---
 
-## Release Notes Template
+## Version Numbering Scheme
 
-When creating new releases, use this template:
+GameCopier follows [Semantic Versioning](https://semver.org/):
 
-```markdown
-## [X.Y.Z] - YYYY-MM-DD
+- **MAJOR.MINOR.PATCH** format
+- **MAJOR**: Incompatible API changes or major feature additions
+- **MINOR**: Backwards-compatible functionality additions
+- **PATCH**: Backwards-compatible bug fixes
 
-### Added
-- New features and functionality
+### Pre-release Identifiers
+- **alpha**: Early development, features incomplete
+- **beta**: Feature-complete, testing phase
+- **preview**: Release candidate, final testing
+- **rc**: Release candidate, minimal changes expected
 
-### Changed
-- Changes to existing functionality
+### Examples
+- `1.0.0` - First stable release
+- `1.1.0` - Minor feature addition
+- `1.1.1` - Bug fix release
+- `2.0.0-preview` - Major version preview
+- `2.0.0-rc.1` - Release candidate
 
-### Deprecated
-- Soon-to-be removed features
+## Release Schedule
 
-### Removed
-- Features removed in this version
+### Current Development Cycle
+- **v1.0.0**: Initial stable release ✅
+- **v1.0.x**: Bug fixes and minor improvements
+- **v1.1.0**: Enhanced UI and user experience improvements
+- **v2.0.0**: Parallel operations and advanced features
 
-### Fixed
-- Bug fixes
+### Planned Release Timeline
+- **Q1 2024**: v1.0.x maintenance releases
+- **Q2 2024**: v2.0.0 with parallel operations
+- **Q3 2024**: v2.1.0 with cloud integration
+- **Q4 2024**: v3.0.0 with enterprise features
 
-### Security
-- Security improvements and fixes
-```
+## Support Policy
 
-### Version Numbering
+### Long-Term Support (LTS)
+- **v1.0.x**: Supported until v2.0.0 stable release
+- **v2.0.x**: Will become LTS after v3.0.0 release
+- **Security Updates**: Provided for current and previous major versions
 
-This project uses [Semantic Versioning](https://semver.org/):
+### End of Life (EOL)
+- **Alpha/Beta Versions**: No ongoing support
+- **Previous Major Versions**: 6 months after new major release
+- **Current Version**: Ongoing support and updates
 
-- **MAJOR** version when you make incompatible API changes
-- **MINOR** version when you add functionality in a backwards compatible manner
-- **PATCH** version when you make backwards compatible bug fixes
+---
 
-Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
+*For more information about releases, see the [Releases page](https://github.com/yourusername/gamecopier/releases)*

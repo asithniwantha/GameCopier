@@ -1,174 +1,143 @@
-# GameCopier
+﻿# 🎮 GameCopier
 
-A modern WinUI 3 desktop application for Windows that enables fast, user-friendly deployment of game folders to USB drives and external storage devices.
+**Game and Software Deployment Tool with Multi-Drive Support**
 
+[![Version](https://img.shields.io/badge/version-1.0.0--preview-blue.svg)](https://github.com/yourusername/gamecopier/releases)
 [![.NET](https://img.shields.io/badge/.NET-9.0-blue.svg)](https://dotnet.microsoft.com/download/dotnet/9.0)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://github.com/microsoft/WindowsAppSDK)
+[![Windows](https://img.shields.io/badge/platform-Windows%2010%2B-blue.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## ? Features
+## 📋 Overview
 
-### ?? Game Library Management
-- **Multiple Game Directories**: Add and manage multiple game library folders
-- **Automatic Scanning**: Automatically detects games in configured directories
-- **Real-time Search**: Quick search functionality across your entire game library
-- **Size Calculation**: Displays game sizes with automatic folder size calculation
+GameCopier is a modern Windows application designed for efficiently copying games and software to multiple USB drives simultaneously. Built with WinUI 3 and .NET 9, it provides a clean, intuitive interface for managing large-scale game deployments.
 
-### ?? Advanced Drive Detection
-- **Smart Drive Recognition**: Detects USB drives, external hard drives, and network storage
-- **Real-time Monitoring**: Automatic detection of newly connected drives with visual highlighting
-- **Enhanced Drive Information**: Shows drive brands, models, file systems, and detailed capacity info
-- **Customizable Filtering**: Show/hide different drive types (USB, Fixed, Network, CD/DVD, RAM)
+## ✨ Key Features
 
-### ?? Comprehensive Settings
-- **Drive Type Filters**: Choose which types of drives to display
-- **Individual Drive Hiding**: Hide specific drive letters from the main interface
-- **Quick Actions**: Bulk show/hide operations for drive management
-- **Persistent Configuration**: All settings saved between sessions
+### Current Features (v1.0.0)
+- 🎯 **Dual Progress Tracking** - Visible robocopy window + real-time UI progress bars
+- 🗂️ **Game & Software Library Management** - Organize your collections with folder monitoring
+- 💾 **USB Drive Detection** - Automatic detection and management of connected drives
+- 📊 **Copy Queue Management** - Queue multiple copy operations with status tracking
+- 🎨 **Modern Windows 11 UI** - Clean, responsive interface with Fluent Design
+- 🔧 **Multiple Copy Methods** - Robocopy, Windows Explorer, and custom implementations
 
-### ?? High-Performance Deployment
-- **Bulk Operations**: Deploy multiple games to multiple drives simultaneously
-- **Parallel Processing**: Multi-threaded copying for maximum speed
-- **Progress Tracking**: Real-time progress indicators for each deployment job
-- **Space Validation**: Automatic space checking before deployment starts
+### 🚀 Coming Soon (v2.0.0)
+- ⚡ **Parallel Multi-Drive Copy** - Simultaneous copying to different drives
+- 📈 **Real-Time Queue Additions** - Add items while copy operations are running
+- 🎯 **Smart Copy Optimization** - Deduplication and incremental updates
+- 📊 **Advanced Analytics** - Transfer speeds, ETAs, and performance metrics
+- ☁️ **Cloud Integration** - OneDrive, Google Drive backup support
 
-### ??? Modern User Interface
-- **WinUI 3**: Native Windows 11-style interface with smooth animations
-- **Responsive Design**: Adapts to different window sizes and screen resolutions
-- **Dark/Light Theme**: Follows system theme preferences
-- **Accessibility**: Full keyboard navigation and screen reader support
+## 🚀 Quick Start
 
-## ?? System Requirements
+### Prerequisites
+- Windows 10 version 1903 (19H1) or later
+- .NET 9.0 Runtime
+- At least 100MB free disk space
 
-- **OS**: Windows 10 version 1809 (build 17763) or later
-- **Runtime**: .NET 9.0 Runtime
-- **Architecture**: x86, x64, or ARM64
-- **Memory**: 512 MB RAM minimum, 1 GB recommended
-- **Storage**: 100 MB free disk space
+### Installation
 
-## ?? Installation
+1. **Download the latest release** from the [Releases page](https://github.com/yourusername/gamecopier/releases)
+2. **Extract** the ZIP file to your desired location
+3. **Run** `GameCopier.exe`
 
-### Option 1: Download Release
-1. Go to the [Releases](../../releases) page
-2. Download the latest `.msix` package
-3. Double-click to install
+### First-Time Setup
 
-### Option 2: Build from Source# Clone the repository
-git clone https://github.com/yourusername/GameCopier.git
-cd GameCopier
+1. **Add Game Folders**: Click the settings button (⚙️) and add your game library folders
+2. **Connect USB Drives**: Plug in your USB drives - they'll appear automatically
+3. **Start Copying**: Select games, choose target drives, and click "ADD & COPY"
+
+## 🎯 Usage
+
+### Basic Copy Operation
+
+1. **Select Items**: Choose games or software from the library tabs
+2. **Choose Drives**: Select target USB drives from the drives panel
+3. **Add to Queue**: Click "ADD & COPY" to start the operation
+4. **Monitor Progress**: Watch real-time progress in both the UI and robocopy window
+
+### Advanced Features
+
+- **Search**: Use the search boxes to quickly find specific games or software
+- **Queue Management**: Monitor all copy operations in the queue panel
+- **Settings**: Configure library folders and display preferences
+- **Test Functions**: Use "TEST PROGRESS" to verify copy functionality
+
+## 🛠️ Development
+
+### Building from Source
+# Clone the repository
+git clone https://github.com/yourusername/gamecopier.git
+cd gamecopier
 
 # Restore dependencies
 dotnet restore
 
-# Build the application
+# Build the project
 dotnet build --configuration Release
 
 # Run the application
-dotnet run --project GameCopier/GameCopier/GameCopier.csproj
-## ?? Quick Start Guide
+dotnet run --project GameCopier/GameCopier
+### Project Structure
+GameCopier/
+├── GameCopier/                 # Main application project
+│   ├── Views/                  # XAML views and UI
+│   ├── ViewModels/            # MVVM view models
+│   ├── Services/              # Business logic and data services
+│   ├── Models/                # Data models and entities
+│   ├── Converters/            # Value converters for UI
+│   └── Core/                  # Core interfaces and utilities
+├── Documentation/             # Project documentation
+└── README.md                 # This file
+### Technologies Used
 
-### 1. Configure Game Libraries
-1. Open **Settings** (gear icon in top-right)
-2. In **Game Library Folders** section, click **Add Folder**
-3. Select your game directories (e.g., Steam library, Epic Games, custom folders)
-4. Click **Close** - games will be automatically scanned
+- **Framework**: .NET 9.0 with WinUI 3
+- **Architecture**: MVVM with CommunityToolkit.Mvvm
+- **UI**: Windows App SDK 1.7+ with Fluent Design
+- **File Operations**: Robocopy, Windows Shell APIs
+- **Configuration**: JSON-based settings storage
 
-### 2. Configure Drive Display
-1. In **Settings** ? **Drive Display Settings**
-2. Enable **Show Internal/Fixed Drives** to see USB hard drives
-3. Optionally hide specific drive letters you don't want to see
-4. Use quick actions: **Show All Drives** or **Hide All Non-System**
+## 📊 Performance
 
-### 3. Deploy Games
-1. **Select Games**: Check games you want to deploy from the left panel
-2. **Select Drives**: Check target USB drives from the right panel
-3. **Start Deployment**: Click the deploy button to begin copying
-4. **Monitor Progress**: Watch real-time progress for each deployment job
+### Current Performance (v1.0.0)
+- **Copy Speed**: Limited by sequential operations
+- **UI Responsiveness**: Real-time progress updates
+- **Memory Usage**: ~50-100MB during operations
+- **Compatibility**: Windows 10 1903+ and Windows 11
 
-## ??? Architecture
+### Planned Improvements (v2.0.0)
+- **40-60% faster** copy times with parallel operations
+- **Sub-second** response time for queue additions
+- **99.9% reliability** for concurrent operations
+- **Advanced resource management** and bandwidth control
 
-### Core Components
-- **LibraryService**: Manages game discovery and library configuration
-- **DriveService**: Handles drive detection, filtering, and information retrieval
-- **DeploymentService**: Orchestrates multi-threaded game deployment operations
-- **SettingsService**: Manages user preferences and configuration persistence
-- **UsbDriveDetectionService**: Real-time USB drive monitoring and event handling
+## 🗺️ Roadmap
 
-### Key Technologies
-- **WinUI 3**: Modern Windows UI framework
-- **MVVM Pattern**: Clean separation between UI and business logic
-- **System.Management**: WMI integration for enhanced drive information
-- **Parallel Processing**: Multi-threaded file operations for performance
-- **JSON Configuration**: Lightweight settings persistence
+### Phase 1: Core Parallel Operations (Q1 2024)
+- [ ] Parallel multi-drive copy implementation
+- [ ] Real-time queue management during operations
+- [ ] Enhanced progress tracking and metrics
+- [ ] Resource management and optimization
 
-## ??? Development
+### Phase 2: Advanced Features (Q2 2024)
+- [ ] Smart copy optimization with deduplication
+- [ ] Advanced analytics and performance metrics
+- [ ] Enhanced error recovery mechanisms
+- [ ] Plugin architecture foundation
 
-### Prerequisites
-- **Visual Studio 2022** (17.8 or later) with:
-  - .NET 9.0 SDK
-  - Windows App SDK workload
-  - C# 13.0 language features
+### Phase 3: Enterprise Features (Q3 2024)
+- [ ] Cloud integration (OneDrive, Google Drive)
+- [ ] Network drive support
+- [ ] Database integration for metadata
+- [ ] Advanced reporting and logging
 
-### Project StructureGameCopier/
-??? GameCopier/                 # Main application project
-?   ??? Models/                 # Data models (Game, Drive, DeploymentJob)
-?   ??? Services/               # Business logic services
-?   ??? ViewModels/             # MVVM view models
-?   ??? Views/                  # XAML views and dialogs
-?   ??? MainWindow.xaml         # Main application window
-??? README.md                   # This file
-??? LICENSE                     # MIT license
-??? .gitignore                  # Git ignore rules
-### Building# Debug build
-dotnet build
+See [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md) for detailed feature planning.
 
-# Release build
-dotnet build --configuration Release
+## 🤝 Contributing
 
-# Create deployable package
-dotnet publish --configuration Release --self-contained true
-### Testing# Run unit tests (when available)
-dotnet test
+We welcome contributions! Here's how you can help:
 
-# Run with detailed logging
-dotnet run --configuration Debug
-## ?? Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Ways to Contribute
-- ?? **Report Bugs**: Submit detailed bug reports with reproduction steps
-- ?? **Suggest Features**: Propose new functionality or improvements
-- ?? **Improve Documentation**: Help make our docs clearer and more comprehensive
-- ?? **Submit Pull Requests**: Fix bugs or implement new features
-
-### Development Workflow
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with clear, descriptive commits
-4. Add tests for new functionality
-5. Submit a pull request with a detailed description
-
-## ?? License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## ?? Acknowledgments
-
-- **Microsoft**: For the excellent WinUI 3 framework and Windows App SDK
-- **Community Contributors**: For bug reports, feature suggestions, and code contributions
-- **.NET Foundation**: For the robust .NET ecosystem
-
-## ?? Support
-
-- **Issues**: [GitHub Issues](../../issues)
-- **Discussions**: [GitHub Discussions](../../discussions)
-- **Documentation**: [Wiki](../../wiki)
-
-## ?? Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
-
----
-
-**Made with ?? for the gaming community**
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`

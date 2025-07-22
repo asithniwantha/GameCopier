@@ -41,7 +41,12 @@
             
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE91B;" FontSize="24" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Margin="0,0,12,0"/>
-                <TextBlock Text="GameDeploy Kiosk" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Vertical">
+                    <TextBlock Text="GameDeploy Kiosk" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding VersionInfo}" FontSize="10" 
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                              Opacity="0.8" Margin="0,-2,0,0"/>
+                </StackPanel>
             </StackPanel>
             
             <Button Grid.Column="1" Command="{Binding ShowSettingsCommand}">

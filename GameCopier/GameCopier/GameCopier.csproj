@@ -10,6 +10,21 @@
     <UseWinUI>true</UseWinUI>
     <Nullable>enable</Nullable>
     
+    <!-- Version Information -->
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <ProductVersion>1.0.0</ProductVersion>
+    <Version>1.0.0</Version>
+    <InformationalVersion>1.0.0-preview</InformationalVersion>
+    
+    <!-- Application Metadata -->
+    <AssemblyTitle>GameCopier</AssemblyTitle>
+    <AssemblyDescription>Game and Software Deployment Tool with Multi-Drive Support</AssemblyDescription>
+    <AssemblyCompany>GameCopier Development Team</AssemblyCompany>
+    <AssemblyProduct>GameCopier</AssemblyProduct>
+    <AssemblyCopyright>Copyright © 2024 GameCopier Development Team</AssemblyCopyright>
+    <AssemblyConfiguration>$(Configuration)</AssemblyConfiguration>
+    
     <!-- Encoding and Culture Settings -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <LangVersion>latest</LangVersion>
